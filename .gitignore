@@ -1,0 +1,53 @@
+# Common Lisp
+*.fasl
+*.lib
+*.sbcl
+*.lisp~
+*.fasl.new
+*.core
+*.heap
+
+# SBCL
+sbcl*
+
+# Quicklisp
+quicklisp/
+
+# Logs
+*.log
+logs/
+
+# Editor
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+node_modules/
+
+# Environment
+.env
+.env.local
+
+# Database
+*.db
+*.sqlite
+
+# Uploads
+lispim-core/uploads/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Test output
+test-output/
