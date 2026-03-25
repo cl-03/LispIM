@@ -1,0 +1,69 @@
+# LispIM 开发环境
+.env
+*.fasl
+*.lib
+*.sl
+*.x86f
+*.amd64f
+*.sparcf
+*.sparc64f
+*.hppa
+*.mipsf
+*.armf
+*.arm64f
+*.fas
+*.nb
+*.ufasl
+*.fsl
+*.msvc.fas
+*.64f
+*.32f
+
+# SBCL
+core
+sbcl.core
+dynamic-space-size.txt
+
+# Quicklisp
+quicklisp/
+!quicklisp/local-projects/
+
+# ASDF
+.asd-cache*
+
+# Logs
+*.log
+logs/
+server_output.log
+
+# Uploads
+uploads/
+data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker
+docker/postgres/data/
+docker/redis/data/
+docker/minio/data/
+
+# Node modules (web-client)
+web-client/node_modules/
+web-client/dist/
+tauri-client/node_modules/
+tauri-client/dist/
+
+# Android
+android-app/.gradle/
+android-app/build/
+android-app/app/build/

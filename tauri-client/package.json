@@ -1,0 +1,39 @@
+{
+  "name": "lispim-desktop",
+  "version": "0.1.0",
+  "description": "LispIM Enterprise Desktop Client (Tauri)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "zustand": "^4.5.0",
+    "crypto-js": "^4.2.0",
+    "dayjs": "^1.11.10",
+    "socket.io-client": "^4.6.1",
+    "idb": "^7.1.1",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/api": "^1.5.3",
+    "@tauri-apps/cli": "^1.5.9",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@types/crypto-js": "^4.2.1",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.0",
+    "tailwindcss": "^3.4.1",
+    "postcss": "^8.4.35",
+    "autoprefixer": "^10.4.17"
+  }
+}

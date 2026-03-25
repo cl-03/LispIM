@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcopy:*)",
+      "Bash(robocopy:*)",
+      "Bash(cd:*)",
+      "Bash(dir:*)",
+      "Bash(cp:*)",
+      "Bash(powershell -Command \"Copy-Item 'D:/VSCode/LispIM/web-client/src/components/*.tsx' -Destination 'D:/VSCode/LispIM/tauri-client/src/components/' -Force\")",
+      "Bash(powershell -Command \"Copy-Item 'D:/VSCode/LispIM/web-client/src/store/*' -Destination 'D:/VSCode/LispIM/tauri-client/src/store/' -Force; Copy-Item 'D:/VSCode/LispIM/web-client/src/utils/*' -Destination 'D:/VSCode/LispIM/tauri-client/src/utils/' -Force; Copy-Item 'D:/VSCode/LispIM/web-client/src/types/*' -Destination 'D:/VSCode/LispIM/tauri-client/src/types/' -Force\")",
+      "Bash(rustup:*)",
+      "Bash(curl:*)",
+      "Bash(powershell -Command \"winget install --id Rustlang.Rustup -e\" 2>&1)",
+      "Bash(powershell -Command \"choco install rust -y\" 2>&1 || echo \"Chocolatey not available\")",
+      "Bash(which ros:*)",
+      "Bash(powershell -Command \"New-Item -ItemType SymbolicLink -Path 'C:\\\\Users\\\\chuangxiu.chen\\\\quicklisp\\\\local-projects\\\\lispim-core' -Target 'D:\\\\VSCode\\\\LispIM\\\\lispim-core' -Force\" 2>&1)",
+      "Bash(sbcl:*)",
+      "Bash(where rustup:*)",
+      "Read(//c/Users/chuangxiu.chen/.cargo/bin/**)",
+      "Read(//d/VSCode/LispIM/tauri-client/src-tauri/$USERPROFILE/.cargo/**)",
+      "Bash(export:*)",
+      "WebSearch",
+      "WebFetch(domain:lispcookbook.github.io)",
+      "WebFetch(domain:localhost)",
+      "WebFetch(domain:github.com)"
+    ]
+  }
+}

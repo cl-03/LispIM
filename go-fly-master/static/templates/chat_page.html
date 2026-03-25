@@ -1,0 +1,105 @@
+<html lang="cn">
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0;" name="viewport" />
+    <meta name="keywords" content="开源客服系统"/>
+    <meta name="description" content="golang开发的开源免费客服系统,可独立部署客服系统,支持文字/表情/图片/文件发送,支持快捷回复,支持IP黑名单,展示访客信息,后台权限控制"/>
+    <title>开源智能在线客服系统</title>
+    <link rel="stylesheet" href="https://cdn.staticfile.org/element-ui/2.15.1/theme-chalk/index.min.css">
+    <script src="https://cdn.staticfile.org/vue/2.6.11/vue.min.js"></script>
+    <script src="https://cdn.staticfile.org/element-ui/2.15.1/index.js"></script>
+    <script src="https://cdn.staticfile.org/jquery/3.6.0/jquery.min.js"></script>
+
+
+    <script src="/assets/js/functions.js?v=fgffdwersdccvcbv"></script>
+    <script src="/assets/js/reconnecting-websocket.min.js"></script>
+    <link rel="stylesheet" href="/static/css/common.css?v=sdsderfrgfgdfdf" />
+    <link rel="stylesheet" href="/static/css/icono.min.css" />
+    <link rel="stylesheet" href="/static/css/icon/iconfont.css?v=fgjlgfda"/>
+</head>
+<body class="visitorBody">
+<div id="app"  class="chatCenter">
+    <template>
+        <!--客服代码-->
+        <div class="chatEntTitle" v-show="!isIframe">
+            <el-badge type="success" is-dot class="item">
+                <el-avatar class="chatEntTitleLogo" :size="35" :src="kefuInfo.avatar"></el-avatar>
+            </el-badge>
+            <div>
+                <div><{kefuInfo.nickname}></div>
+            </div>
+        </div>
+        <div class="chatEntBox">
+            <div class="chatContext chatVisitorPage">
+                <div class="chatBox">
+                    <div class="chatNotice" v-on:click="getHistoryMessage" v-show="showLoadMore">
+                        <a href="javascript:;" class="chatNoticeContent" style="color: #07a9fe;">点击加载更多记录</a>
+                    </div>
+                    <el-row :gutter="2" v-for="v in msgList" v-bind:class="{'chatBoxMe': v.is_kefu==false}">
+                        <div class="chatTime" v-bind:class="{'chatTimeHide': v.show_time==false}"><span><{v.time}></span></div>
+                        <div v-if="v.is_kefu==true" style="display: flex;">
+                            <el-avatar style="margin-right:10px;flex-shrink: 0;"  :size="36" :src="v.avator"></el-avatar>
+                            <div class="chatMsgContent">
+                                <div class="chatContent chatContent2 replyContentBtn" v-html="v.content"></div>
+                            </div>
+                        </div>
+                        <div class="kefuMe" v-if="v.is_kefu==false" style="display: flex;justify-content: flex-end;">
+                            <div class="chatContent chatContent2 replyContentBtn" v-html="v.content"></div>
+                            <el-avatar style="margin-left:10px;flex-shrink: 0;"  :size="36" :src="v.avator"></el-avatar>
+                        </div>
+                        <div class="clear"></div>
+                    </el-row>
+                </div>
+            </div>
+            <div class="chatBoxSend">
+
+                <div class="visitorIconBox">
+                    <el-tooltip content="发送表情" placement="top">
+                        <div class="iconBtn iconfont icon-xiaolian" style="margin-left:10px;font-size: 24px;cursor: pointer;" @click.stop="showFaceIcon==true?showFaceIcon=false:showFaceIcon=true"></div>
+                    </el-tooltip>
+
+                    <el-tooltip content="上传图片" placement="top">
+                        <div class="iconBtn el-icon-picture" id="uploadImg" v-on:click="uploadImg('/uploadimg')" style="font-size: 24px;"></div>
+                    </el-tooltip>
+                    <el-tooltip content="上传附件" placement="top">
+                        <div  class="iconBtn el-icon-upload" id="uploadFile" v-on:click="uploadFile('/uploadfile')" style="font-size: 26px;"></div>
+                    </el-tooltip>
+
+                    <div  style="display: none" :title="flyLang.emotions" class="icono-smile visitorIconBtns visitorFaceBtn"></div>
+
+                    <div class="clear"></div>
+                </div>
+                <div class="faceBox visitorFaceBox" v-show="showFaceIcon">
+                    <ul class="faceBoxList">
+                        <li v-on:click="faceIconClick(i)" class="faceIcon" v-for="(v,i) in face"  :title="v.name"><img :src=v.path></li>
+                    </ul>
+                    <div class="clear"></div>
+                </div>
+                 <el-input show-word-limit maxlength="100" :rows="2" type="textarea" resize="none" class="visitorEditorArea"  @focus="scrollBottom;showIconBtns=false" @blur="scrollBottom;showIconBtns=false" v-model="messageContent" v-on:keyup.enter.native="chatToUser">
+                    </el-input>
+                <el-button type="primary" size="mini"  class="visitorEditorBtn"   :disabled="sendDisabled||messageContent==''" v-on:click="chatToUser();showIconBtns=false"><{flyLang.sent}></el-button>
+            </div>
+        </div>
+        <div class="chatArticle">
+            <h3 class="hotQuestionTitle">公告通知
+            </h3>
+            <div class="allNotice" v-html><{kefuInfo.allNotice}></div>
+        </div>
+
+
+        <!--//客服代码-->
+        <audio id="chatMessageAudio">
+        </audio>
+        <audio id="chatMessageSendAudio">
+        </audio>
+    </template>
+</div>
+</body>
+<script>
+    var KEFU_ID='{{.KEFU_ID}}';
+    var REFER='{{.Refer}}';
+    var LANG=checkLang();
+</script>
+<script src="/assets/js/chat-lang.js?v=0.3.7"></script>
+<script src="/assets/js/chat-page.js?v=rtyrhgfnykug"></script>
+</html>

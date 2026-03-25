@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+
+with open(r'D:\Claude\LispIM\lispim-core\src\gateway.lisp', 'rb') as f:
+    content = f.read()
+
+# Fix line 675 - separate comment from code
+old1 = b";; \xe8\xbf\x94\xe5\x9b\x9e\xe5\x8f\x91\xe9\x80\x81\xe6\x88\x90\xe5\x8a\x9f\xe7\x9a\x84\xe6\xb6\x88\xe6\x81\xaf\xe7\xbb\x99\xe5\x8f\x91\xe9\x80\x81\xe8\x80\x85            (send-ws-message conn +ws-msg-message+\r\n"
+new1 = b";; \xe8\xbf\x94\xe5\x9b\x9e\xe5\x8f\x91\xe9\x80\x81\xe6\x88\x90\xe5\x8a\x9f\xe7\x9a\x84\xe6\xb6\x88\xe6\x81\xaf\xe7\xbb\x99\xe5\x8f\x91\xe9\x80\x81\xe8\x80\x85\r\n            (send-ws-message conn +ws-msg-message+\r\n"
+
+content = content.replace(old1, new1)
+
+with open(r'D:\Claude\LispIM\lispim-core\src\gateway.lisp', 'wb') as f:
+    f.write(content)
+
+print('Fixed line 675')

@@ -1,0 +1,5 @@
+(require 'asdf)
+(ql:quickload '(:hunchentoot :cl-json :bordeaux-threads :uuid :babel :log4cl :ironclad :alexandria))
+(asdf:load-system :lispim-core)
+(in-package :lispim-core)
+(start-server)

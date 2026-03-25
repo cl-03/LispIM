@@ -1,0 +1,115 @@
+#root {
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #111827;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Emoji GIF styling */
+.emoji-gif {
+  width: 28px;
+  height: 28px;
+  vertical-align: middle;
+  display: inline-block;
+  margin: 0 2px;
+}
+
+/* Message bubble animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* Message bubble tail effect */
+.message-bubble-own {
+  position: relative;
+}
+
+.message-bubble-own::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid #3b82f6;
+  border-left: 8px solid transparent;
+}
+
+.message-bubble-other {
+  position: relative;
+}
+
+.message-bubble-other::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -8px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid #e5e7eb;
+  border-right: 8px solid transparent;
+}
+
+/* Link styling in messages */
+.message-content a {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.message-content a:hover {
+  color: #93c5fd;
+}
+
+/* Search highlight */
+.message-content mark {
+  background-color: #fde047;
+  color: #1f2937;
+  padding: 0 4px;
+  border-radius: 2px;
+}

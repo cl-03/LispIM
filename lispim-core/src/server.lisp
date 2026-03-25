@@ -1,0 +1,214 @@
+;;;; server.lisp - LispIM 服务器主入口
+;;;;
+;;;; 整合所有模块，提供统一的启动入口
+
+(in-package :lispim-core)
+
+;;;; 依赖声明
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (ql:quickload '(:log4cl)))
+
+;;;; 服务器状态
+
+(defvar *server-start-time* (get-universal-time)
+  "服务器启动时间")
+
+(defvar *server-running* nil
+  "服务器运行状态")
+
+;;;; 服务器配置
+
+(defparameter *default-config*
+  (make-config
+   :host "0.0.0.0"
+   :port 3000
+   :database-url (or (uiop:getenv "DATABASE_URL")
+                     "postgresql://lispim:Clsper03@127.0.0.1:5432/lispim")
+   :redis-url (or (uiop:getenv "REDIS_URL")
+                  "redis://127.0.0.1:6379/0")
+   :ssl-cert nil
+   :ssl-key nil
+   :oc-endpoint ""
+   :oc-api-key ""
+   :log-level :info
+   :max-connections 10000
+   :heartbeat-interval 30
+   :heartbeat-timeout 90)
+  "默认配置")
+
+;;;; 服务器初始化
+
+(defun init-server (&optional (config *default-config*))
+  "初始化服务器"
+  (declare (type config config))
+  (setf *config* config)
+
+  (log-info "Initializing LispIM Server...")
+
+  ;; 初始化日志
+  (setup-logging :level (config-log-level config))
+
+  ;; 初始化存储
+  (init-storage (config-database-url config)
+                (config-redis-url config))
+
+  ;; 初始化消息序列计数器（从数据库恢复）
+  (initialize-sequence-counters)
+
+  ;; 初始化可观测性
+  (init-observability :log-level (config-log-level config))
+
+  ;; 注册健康检查
+  (register-default-health-checks)
+
+  ;; 初始化 OpenClaw 适配器（如果配置了）
+  (when (and (config-oc-endpoint config)
+             (not (str:emptyp (config-oc-endpoint config))))
+    (init-oc-adapter :endpoint (config-oc-endpoint config)
+                     :api-key (config-oc-api-key config)))
+
+  (log-info "Server initialized"))
+
+;;;; 服务器启动
+
+(defun start-server (&optional (config *default-config*))
+  "启动 LispIM 服务器"
+  (declare (type config config))
+
+  ;; 初始化
+  (init-server config)
+
+  (setf *server-running* t
+        *server-start-time* (get-universal-time))
+
+  (log-info "========================================")
+  (log-info "  LispIM Enterprise Server v0.1.0")
+  (log-info "========================================")
+  (log-info "Host: ~a" (config-host config))
+  (log-info "Port: ~a" (config-port config))
+  (log-info "Database: ~a" (config-database-url config))
+  (log-info "Redis: ~a" (config-redis-url config))
+  (log-info "SSL: ~a" (if (config-ssl-cert config) "Enabled" "Disabled"))
+  (log-info "OpenClaw: ~a" (if (config-oc-endpoint config) "Enabled" "Disabled"))
+  (log-info "========================================")
+
+  ;; 启动网关
+  (start-gateway
+   :host (config-host config)
+   :port (config-port config)
+   :use-ssl (if (config-ssl-cert config) t nil)
+   :ssl-cert (config-ssl-cert config)
+   :ssl-key (config-ssl-key config))
+
+  (log-info "Server started successfully"))
+
+;;;; 服务器停止
+
+(defun stop-server ()
+  "停止 LispIM 服务器"
+  (log-info "Stopping server...")
+
+  (setf *server-running* nil)
+
+  ;; 停止网关
+  (stop-gateway)
+
+  ;; 关闭 OpenClaw 适配器
+  (when *oc-connected*
+    (shutdown-oc-adapter))
+
+  ;; 关闭存储连接
+  (close-storage)
+
+  ;; 关闭可观测性
+  (shutdown-observability)
+
+  ;; 清理 E2EE 数据
+  (secure-cleanup)
+
+  (log-info "Server stopped"))
+
+;;;; 重启
+
+(defun restart-server ()
+  "重启服务器"
+  (stop-server)
+  (sleep 1)
+  (start-server *config*))
+
+;;;; 辅助函数
+
+;;;; 环境变量配置
+
+(defun load-config-from-env ()
+  "从环境变量加载配置"
+  (make-config
+   :host (or (uiop:getenv "LISPIM_HOST") "0.0.0.0")
+   :port (parse-integer (or (uiop:getenv "LISPIM_PORT") "4321"))
+   :database-url (or (uiop:getenv "DATABASE_URL")
+                     "postgresql://localhost:5432/lispim")
+   :redis-url (or (uiop:getenv "REDIS_URL")
+                  "redis://localhost:6379/0")
+   :ssl-cert (when (uiop:getenv "SSL_CERT_PATH")
+               (pathname (uiop:getenv "SSL_CERT_PATH")))
+   :ssl-key (when (uiop:getenv "SSL_KEY_PATH")
+              (pathname (uiop:getenv "SSL_KEY_PATH")))
+   :oc-endpoint (or (uiop:getenv "OPENCLAW_ENDPOINT") "")
+   :oc-api-key (or (uiop:getenv "OPENCLAW_API_KEY") "")
+   :log-level (keywordify (or (uiop:getenv "LOG_LEVEL") "info"))
+   :max-connections (parse-integer (or (uiop:getenv "MAX_CONNECTIONS") "10000"))
+   :heartbeat-interval (parse-integer (or (uiop:getenv "HEARTBEAT_INTERVAL") "30"))
+   :heartbeat-timeout (parse-integer (or (uiop:getenv "HEARTBEAT_TIMEOUT") "90"))))
+
+(defun keywordify (str)
+  "字符串转关键词"
+  (intern (string-upcase str) 'keyword))
+
+;;;; REPL 辅助
+
+(defun repl-start (&key (config nil))
+  "REPL 启动辅助"
+  (let ((cfg (or config (load-config-from-env))))
+    (start-server cfg)))
+
+(defun repl-stop ()
+  "REPL 停止辅助"
+  (stop-server))
+
+;;;; 主函数
+
+(defun main ()
+  "主函数（用于 sbcl --script 启动）"
+  (handler-case
+      (progn
+        (start-server *default-config*)
+        ;; 保持运行
+        (loop while *server-running*
+              do (sleep 1)))
+    (error (c)
+      (log:error "Server error: ~a" c)
+      (stop-server))))
+
+;;;; 导出
+
+(export '(start-server
+          stop-server
+          restart-server
+          init-server
+          *server-running*
+          *server-start-time*
+          *config*
+          make-config
+          config-host
+          config-port
+          config-database-url
+          config-redis-url
+          config-ssl-cert
+          config-ssl-key
+          config-oc-endpoint
+          config-oc-api-key
+          config-log-level
+          load-config-from-env
+          main)
+        :lispim-core)

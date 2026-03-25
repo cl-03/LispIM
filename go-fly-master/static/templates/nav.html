@@ -1,0 +1,50 @@
+{{define "nav"}}
+    <div class="mainLeftMenu">
+        <div style="margin: 20px auto;">
+            <el-badge :type="onlineType" is-dot class="item">
+                <el-avatar   class="mainLogo"  title="智能客服" :size="45" src="/static/images/1.jpg"></el-avatar>
+            </el-badge>
+        </div>
+        <div style="display: none" class="menuLeftItem" v-on:click="openIframeUrl('/mainGuide')">
+            <i class="el-icon-house"></i>
+            <span slot="title">首页</span>
+        </div>
+
+        <div class="menuLeftItem active" v-on:click="haveNewMessage='';openIframeUrl('/chat_main')">
+            <el-badge :value="haveNewMessage" class="item">
+                <i class="el-icon-chat-dot-round"></i>
+            </el-badge>
+            <span slot="title">对话</span>
+        </div>
+
+
+        <div style="display: none" class="menuLeftItem" v-on:click="openIframeUrl('/setting_deploy')">
+            <i class="el-icon-notebook-2"></i>
+            <span slot="title">对接</span>
+        </div>
+
+
+        <div  class="menuLeftItem"  v-on:click="openIframeUrl('/setting')">
+            <i class="el-icon-setting"></i>
+            <span slot="title">设置</span>
+        </div>
+
+
+        <div style="display: none" class="menuLeftItem" v-on:click="openIframeUrl('/setting_welcome')">
+            <i class="el-icon-timer"></i>
+            <span slot="title">欢迎</span>
+        </div>
+
+        <div style="display: none" class="menuLeftItem" v-on:click="openIframeUrl('/setting')">
+            <i class="el-icon-menu"></i>
+            <span slot="title">菜单</span>
+        </div>
+
+        <div  class="menuLeftItem menuLeftItemLogout" v-on:click="logout()">
+            <i class="el-icon-switch-button"></i>
+            <span slot="title">退出</span>
+        </div>
+
+    </div>
+
+{{end}}

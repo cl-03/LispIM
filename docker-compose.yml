@@ -1,0 +1,103 @@
+# LispIM Development Environment
+# Docker Compose configuration for local development
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: lispim-postgres
+    environment:
+      POSTGRES_DB: lispim
+      POSTGRES_USER: lispim
+      POSTGRES_PASSWORD: lispim_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lispim"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: lispim-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # SBCL Development Environment
+  sbcl:
+    build:
+      context: ./lispim-core
+      dockerfile: Dockerfile
+    container_name: lispim-sbcl
+    volumes:
+      - ./lispim-core:/app/lispim-core
+      - ./openclaw-connector-lispim:/app/openclaw-connector
+      - sbcl_home:/root/.sbcl
+    ports:
+      - "3000:3000"
+      - "9000:9000"
+    environment:
+      DATABASE_URL: postgresql://lispim:lispim_dev_password@postgres:5432/lispim
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sbcl", "--load", "/app/lispim-core/src/server.lisp"]
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: lispim-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    depends_on:
+      - sbcl
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: lispim-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  redis_data:
+  sbcl_home:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: lispim-network

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LispIM Enterprise",
+  "version": "0.1.0",
+  "identifier": "com.lispim.enterprise",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "LispIM Enterprise",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "center": true,
+        "skipTaskbar": false,
+        "titleBarStyle": "Visible",
+        "hiddenTitle": false,
+        "acceptFirstMouse": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "macOS": {
+      "entitlements": null,
+      "infoPlist": {
+        "NSCameraUsageDescription": "用于视频通话",
+        "NSMicrophoneUsageDescription": "用于语音通话"
+      }
+    }
+  },
+  "plugins": {
+    "notification": {
+      "active": true
+    },
+    "globalShortcut": {
+      "active": true
+    },
+    "shell": {
+      "active": true,
+      "open": "^((http|https)://)?[a-zA-Z0-9\\.\\/\\?\\=\\#\\&\\_\\-]+$"
+    }
+  }
+}

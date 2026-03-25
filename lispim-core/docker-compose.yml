@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:14-alpine
+    container_name: lispim-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lispim
+      POSTGRES_USER: lispim
+      POSTGRES_PASSWORD: Clsper03
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lispim -d lispim"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lispim-net
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: lispim-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lispim-net
+
+  # MinIO 对象存储（替代阿里云 OSS）
+  minio:
+    image: minio/minio:latest
+    container_name: lispim-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: lispim
+      MINIO_ROOT_PASSWORD: Clsper03
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    volumes:
+      - miniodata:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - lispim-net
+    depends_on:
+      - postgres
+
+  # MailHog 邮件测试工具（开发环境）
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: lispim-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP 服务器
+      - "8025:8025"  # Web 管理界面
+    networks:
+      - lispim-net
+
+  # Adminer 数据库管理工具
+  adminer:
+    image: adminer:latest
+    container_name: lispim-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      - postgres
+    networks:
+      - lispim-net
+
+  # Redis Commander - Redis 可视化管理
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: lispim-redis-commander
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - lispim-net
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  miniodata:
+    driver: local
+
+networks:
+  lispim-net:
+    driver: bridge

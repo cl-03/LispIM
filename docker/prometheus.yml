@@ -1,0 +1,34 @@
+# Prometheus configuration for LispIM monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'lispim-gateway'
+    static_configs:
+      - targets: ['sbcl:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+# Alert rules
+rule_files:
+  - "alerts.yml"
+
+# Alertmanager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']

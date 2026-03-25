@@ -1,0 +1,150 @@
+This is SBCL 2.5.8, an implementation of ANSI Common Lisp.
+More information about SBCL is available at <http://www.sbcl.org/>.
+
+SBCL is free software, provided as is, with absolutely no warranty.
+It is mostly in the public domain; some portions are provided under
+BSD-style licenses.  See the CREDITS and COPYING files in the
+distribution for more information.
+To load "lispim-core":
+  Load 1 ASDF system:
+    lispim-core
+; Loading "lispim-core"
+.............................To load "log4cl":
+  Load 1 ASDF system:
+    log4cl
+; Loading "log4cl"
+
+To load "uuid":
+  Load 1 ASDF system:
+    uuid
+; Loading "uuid"
+
+To load "flexi-streams":
+  Load 1 ASDF system:
+    flexi-streams
+; Loading "flexi-streams"
+
+To load "flexi-streams":
+  Load 1 ASDF system:
+    flexi-streams
+; Loading "flexi-streams"
+
+To load "postmodern":
+  Load 1 ASDF system:
+    postmodern
+; Loading "postmodern"
+
+To load "cl-fad":
+  Load 1 ASDF system:
+    cl-fad
+; Loading "cl-fad"
+
+To load "cl-ppcre":
+  Load 1 ASDF system:
+    cl-ppcre
+; Loading "cl-ppcre"
+
+To load "ironclad":
+  Load 1 ASDF system:
+    ironclad
+; Loading "ironclad"
+
+To load "babel":
+  Load 1 ASDF system:
+    babel
+; Loading "babel"
+
+To load "alexandria":
+  Load 1 ASDF system:
+    alexandria
+; Loading "alexandria"
+
+To load "postmodern":
+  Load 1 ASDF system:
+    postmodern
+; Loading "postmodern"
+
+To load "cl-redis":
+  Load 1 ASDF system:
+    cl-redis
+; Loading "cl-redis"
+
+To load "bordeaux-threads":
+  Load 1 ASDF system:
+    bordeaux-threads
+; Loading "bordeaux-threads"
+
+To load "cl-json":
+  Load 1 ASDF system:
+    cl-json
+; Loading "cl-json"
+
+To load "uuid":
+  Load 1 ASDF system:
+    uuid
+; Loading "uuid"
+
+To load "ironclad":
+  Load 1 ASDF system:
+    ironclad
+; Loading "ironclad"
+
+To load "bordeaux-threads":
+  Load 1 ASDF system:
+    bordeaux-threads
+; Loading "bordeaux-threads"
+
+To load "uuid":
+  Load 1 ASDF system:
+    uuid
+; Loading "uuid"
+
+To load "cl-json":
+  Load 1 ASDF system:
+    cl-json
+; Loading "cl-json"
+
+To load "postmodern":
+  Load 1 ASDF system:
+    postmodern
+; Loading "postmodern"
+
+To load "hunchentoot":
+  Load 1 ASDF system:
+    hunchentoot
+; Loading "hunchentoot"
+
+To load "bordeaux-threads":
+  Load 1 ASDF system:
+    bordeaux-threads
+; Loading "bordeaux-threads"
+
+To load "uuid":
+  Load 1 ASDF system:
+    uuid
+; Loading "uuid"
+
+To load "cl-json":
+  Load 1 ASDF system:
+    cl-json
+; Loading "cl-json"
+
+To load "flexi-streams":
+  Load 1 ASDF system:
+    flexi-streams
+; Loading "flexi-streams"
+
+To load "cl-base64":
+  Load 1 ASDF system:
+    cl-base64
+; Loading "cl-base64"
+
+To load "ironclad":
+  Load 1 ASDF system:
+    ironclad
+; Loading "ironclad"
+
+ <INFO> [16:25:36] lispim-core gateway.lisp () -
+  (FORMAT NIL "[~a] === LOGIN REQUEST END ==="
+          (GET-UNIVERSAL-TIME)): "[3983415936] === LOGIN REQUEST END ==="
+  
