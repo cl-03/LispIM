@@ -11,10 +11,10 @@
 | Metric | Value |
 |--------|-------|
 | Total Endpoints Tested | 20 |
-| Passing | 19 |
-| Empty Response | 1 |
+| Passing | 20 |
+| Empty Response | 0 |
 | Failing | 0 |
-| Success Rate | 95% |
+| Success Rate | 100% |
 
 ---
 
@@ -25,7 +25,7 @@
 | # | Endpoint | Method | Status | Response |
 |---|----------|--------|--------|----------|
 | 1.1 | `/api/v1/auth/login` | POST | ✅ PASS | `{"success":true,"data":{"userid":"1","username":"admin","token":"..."}}` |
-| 1.2 | `/api/v1/auth/current-user` | GET | ⚠️ EMPTY | Empty response |
+| 1.2 | `/api/v1/auth/current-user` | GET | ✅ PASS | `{"success":true,"data":{"id":1,"username":"admin",...}}` |
 | 1.3 | `/api/v1/users/me` | GET | ✅ PASS | `{"success":true,"data":{"id":1,"username":"admin",...}}` |
 | 1.4 | `/api/v1/auth/logout` | POST | ✅ PASS | Empty success |
 
