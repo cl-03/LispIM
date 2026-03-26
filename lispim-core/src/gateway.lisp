@@ -790,6 +790,9 @@
   ;; Add current user profile handler
   (push (hunchentoot:create-regex-dispatcher "^/api/v1/users/me$" 'api-current-user-handler)
         hunchentoot:*dispatch-table*)
+  ;; Also support /api/v1/auth/current-user alias
+  (push (hunchentoot:create-regex-dispatcher "^/api/v1/auth/current-user$" 'api-current-user-handler)
+        hunchentoot:*dispatch-table*)
 
   ;; Add update user profile handler
   (push (hunchentoot:create-regex-dispatcher "^/api/v1/users/profile$" 'api-update-profile-handler)
