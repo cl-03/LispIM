@@ -6,8 +6,12 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.lispim.app.data.local.dao.MessageDao
 import com.lispim.app.data.local.dao.ConversationDao
+import com.lispim.app.data.local.dao.OfflineMessageDao
+import com.lispim.app.data.local.dao.SyncAnchorDao
 import com.lispim.app.data.local.entity.MessageEntity
 import com.lispim.app.data.local.entity.ConversationEntity
+import com.lispim.app.data.local.entity.OfflineMessageEntity
+import com.lispim.app.data.local.entity.SyncAnchorEntity
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -21,15 +25,19 @@ import javax.inject.Singleton
 @Database(
     entities = [
         ConversationEntity::class,
-        MessageEntity::class
+        MessageEntity::class,
+        OfflineMessageEntity::class,
+        SyncAnchorEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class LispIMDatabase : RoomDatabase() {
 
     abstract fun conversationDao(): ConversationDao
     abstract fun messageDao(): MessageDao
+    abstract fun offlineMessageDao(): OfflineMessageDao
+    abstract fun syncAnchorDao(): SyncAnchorDao
 
     companion object {
         private const val DATABASE_NAME = "lispim_db"
@@ -65,5 +73,17 @@ object DatabaseModule {
     @Singleton
     fun provideMessageDao(database: LispIMDatabase): MessageDao {
         return database.messageDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideOfflineMessageDao(database: LispIMDatabase): OfflineMessageDao {
+        return database.offlineMessageDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSyncAnchorDao(database: LispIMDatabase): SyncAnchorDao {
+        return database.syncAnchorDao()
     }
 }

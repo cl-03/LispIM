@@ -96,6 +96,11 @@
 
 ;;;; Helper Functions
 
+(defun keywordify (str)
+  "Convert string to keyword"
+  (declare (type string str))
+  (intern (string-upcase str) 'keyword))
+
 (defun get-request-body-string ()
   "Get request body as string, handling both byte arrays and strings"
   (handler-case
@@ -830,6 +835,20 @@
 
   ;; Add FCM token handlers
   (push (hunchentoot:create-regex-dispatcher "^/api/v1/device/fcm-token$" 'api-register-fcm-token-handler)
+        hunchentoot:*dispatch-table*)
+
+  ;; Add fulltext search handler
+  (push (hunchentoot:create-regex-dispatcher "^/api/v1/search$" 'api-search-handler)
+        hunchentoot:*dispatch-table*)
+
+  ;; Add message reply handlers
+  (push (hunchentoot:create-regex-dispatcher "^/api/v1/messages/([^/]+)/reply$" 'api-reply-message-handler)
+        hunchentoot:*dispatch-table*)
+  (push (hunchentoot:create-regex-dispatcher "^/api/v1/messages/([^/]+)/replies$" 'api-get-replies-handler)
+        hunchentoot:*dispatch-table*)
+  (push (hunchentoot:create-regex-dispatcher "^/api/v1/messages/([^/]+)/reply-chain$" 'api-get-reply-chain-handler)
+        hunchentoot:*dispatch-table*)
+  (push (hunchentoot:create-regex-dispatcher "^/api/v1/threads/([^/]+)$" 'api-get-thread-handler)
         hunchentoot:*dispatch-table*)
 
   ;; Start heartbeat monitor
@@ -2303,5 +2322,177 @@ lispim_uptime ~a~%"
         (log-error "Get FCM tokens error: ~A" c)
         (setf (hunchentoot:return-code*) 500)
         (encode-api-response (make-api-error "INTERNAL_ERROR" (format nil "~A" c)))))))
+
+;;;; Fulltext Search API
+
+;; GET /api/v1/search?q={query}&type={type}&limit={limit} - Search messages, contacts, conversations
+(defun api-search-handler ()
+  "Search messages, contacts, or conversations"
+  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
+  (setf (hunchentoot:content-type*) "application/json")
+  (let ((user-id (require-auth)))
+    (unless user-id
+      (setf (hunchentoot:return-code*) 401)
+      (return-from api-search-handler
+        (encode-api-response (make-api-error "AUTH_REQUIRED" "Authentication required"))))
+    (let* ((query (hunchentoot:get-parameter "q"))
+           (type (or (hunchentoot:get-parameter "type") "all"))
+           (limit (parse-integer (or (hunchentoot:get-parameter "limit") "20") :junk-allowed t))
+           (conversation-id (hunchentoot:get-parameter "conversationId")))
+      (unless query
+        (setf (hunchentoot:return-code*) 400)
+        (return-from api-search-handler
+          (encode-api-response (make-api-error "MISSING_FIELDS" "Query parameter 'q' is required"))))
+      (handler-case
+          (let* ((search-type (keywordify type))
+                 (results (fulltext-search user-id query
+                                           :type search-type
+                                           :limit limit
+                                           :conversation-id conversation-id)))
+            (encode-api-response (make-api-response results)))
+        (error (c)
+          (log-error "Search error: ~A" c)
+          (setf (hunchentoot:return-code*) 500)
+          (encode-api-response (make-api-error "SEARCH_FAILED" (format nil "~A" c))))))))
+
+;;;; Message Reply API
+
+;; POST /api/v1/messages/:id/reply - Send reply message
+(defun api-reply-message-handler ()
+  "Send reply message"
+  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
+  (setf (hunchentoot:content-type*) "application/json")
+  (unless (string= (hunchentoot:request-method hunchentoot:*request*) "POST")
+    (setf (hunchentoot:return-code*) 405)
+    (return-from api-reply-message-handler
+      (encode-api-response (make-api-error "METHOD_NOT_ALLOWED" "Method not allowed"))))
+  (let ((user-id (require-auth)))
+    (unless user-id
+      (setf (hunchentoot:return-code*) 401)
+      (return-from api-reply-message-handler
+        (encode-api-response (make-api-error "AUTH_REQUIRED" "Authentication required"))))
+    (let* ((uri (hunchentoot:request-uri hunchentoot:*request*))
+           (message-id (multiple-value-bind (match-start match-end reg-start reg-end)
+                         (cl-ppcre:scan "^/api/v1/messages/([^/]+)/reply$" uri)
+                         (if match-start
+                             (subseq uri (aref reg-start 0) (aref reg-end 0))
+                             (return-from api-reply-message-handler
+                               (progn
+                                 (setf (hunchentoot:return-code*) 400)
+                                 (encode-api-response (make-api-error "INVALID_URI" "Invalid message URI")))))))
+           (body-str (get-request-body-string))
+           (body (cl-json:decode-json-from-string body-str)))
+      (log-info "Reply body str: ~A" body-str)
+      (log-info "Reply body decoded: ~A" body)
+      (let* ((content (cdr (assoc :content body)))
+             (conversation-id (cdr (assoc :conversation-id body)))
+             (quote-content (cdr (assoc :quote-content body)))
+             (quote-type (or (cdr (assoc :quote-type body)) "text"))
+             (message-type (or (cdr (assoc :message-type body)) "text")))
+        (log-info "Parsed content: ~A, conversation-id: ~A" content conversation-id)
+        (unless (and content conversation-id)
+          (setf (hunchentoot:return-code*) 400)
+          (return-from api-reply-message-handler
+            (encode-api-response (make-api-error "MISSING_FIELDS" "Content and conversationId are required"))))
+        (handler-case
+            (let* ((reply-id (create-message-reply message-id content
+                                                   :sender-id user-id
+                                                   :conversation-id conversation-id
+                                                   :quote-content quote-content
+                                                   :quote-type quote-type)))
+              (encode-api-response
+               (make-api-response (list :messageId reply-id)
+                                  :message "Reply sent successfully")))
+          (error (c)
+            (log-error "Reply message error: ~A" c)
+            (setf (hunchentoot:return-code*) 500)
+            (encode-api-response (make-api-error "REPLY_FAILED" (format nil "~A" c)))))))))
+
+;; GET /api/v1/messages/:id/replies?limit={limit} - Get message replies
+(defun api-get-replies-handler ()
+  "Get message replies"
+  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
+  (setf (hunchentoot:content-type*) "application/json")
+  (let ((user-id (require-auth)))
+    (unless user-id
+      (setf (hunchentoot:return-code*) 401)
+      (return-from api-get-replies-handler
+        (encode-api-response (make-api-error "AUTH_REQUIRED" "Authentication required"))))
+    (let* ((uri (hunchentoot:request-uri hunchentoot:*request*))
+           (message-id (multiple-value-bind (match-start match-end reg-start reg-end)
+                         (cl-ppcre:scan "^/api/v1/messages/([^/]+)/replies$" uri)
+                         (if match-start
+                             (subseq uri (aref reg-start 0) (aref reg-end 0))
+                             (return-from api-get-replies-handler
+                               (progn
+                                 (setf (hunchentoot:return-code*) 400)
+                                 (encode-api-response (make-api-error "INVALID_URI" "Invalid message URI")))))))
+           (limit (parse-integer (or (hunchentoot:get-parameter "limit") "100") :junk-allowed t)))
+      (handler-case
+          (let ((replies (get-message-replies message-id :limit limit)))
+            (encode-api-response
+             (make-api-response (list :replies replies
+                                      :count (length replies)))))
+        (error (c)
+          (log-error "Get replies error: ~A" c)
+          (setf (hunchentoot:return-code*) 500)
+          (encode-api-response (make-api-error "GET_REPLIES_FAILED" (format nil "~A" c))))))))
+
+;; GET /api/v1/messages/:id/reply-chain - Get reply chain
+(defun api-get-reply-chain-handler ()
+  "Get reply chain from root to message"
+  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
+  (setf (hunchentoot:content-type*) "application/json")
+  (let ((user-id (require-auth)))
+    (unless user-id
+      (setf (hunchentoot:return-code*) 401)
+      (return-from api-get-reply-chain-handler
+        (encode-api-response (make-api-error "AUTH_REQUIRED" "Authentication required"))))
+    (let* ((uri (hunchentoot:request-uri hunchentoot:*request*))
+           (message-id (multiple-value-bind (match-start match-end reg-start reg-end)
+                         (cl-ppcre:scan "^/api/v1/messages/([^/]+)/reply-chain$" uri)
+                         (if match-start
+                             (subseq uri (aref reg-start 0) (aref reg-end 0))
+                             (return-from api-get-reply-chain-handler
+                               (progn
+                                 (setf (hunchentoot:return-code*) 400)
+                                 (encode-api-response (make-api-error "INVALID_URI" "Invalid message URI"))))))))
+      (handler-case
+          (let ((chain (get-reply-chain message-id)))
+            (encode-api-response
+             (make-api-response (list :chain chain
+                                      :length (length chain)))))
+        (error (c)
+          (log-error "Get reply chain error: ~A" c)
+          (setf (hunchentoot:return-code*) 500)
+          (encode-api-response (make-api-error "GET_CHAIN_FAILED" (format nil "~A" c))))))))
+
+;; GET /api/v1/threads/:root-id - Get thread info
+(defun api-get-thread-handler ()
+  "Get thread information"
+  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
+  (setf (hunchentoot:content-type*) "application/json")
+  (let ((user-id (require-auth)))
+    (unless user-id
+      (setf (hunchentoot:return-code*) 401)
+      (return-from api-get-thread-handler
+        (encode-api-response (make-api-error "AUTH_REQUIRED" "Authentication required"))))
+    (let* ((uri (hunchentoot:request-uri hunchentoot:*request*))
+           (root-id (multiple-value-bind (match-start match-end reg-start reg-end)
+                      (cl-ppcre:scan "^/api/v1/threads/([^/]+)$" uri)
+                      (if match-start
+                          (subseq uri (aref reg-start 0) (aref reg-end 0))
+                          (return-from api-get-thread-handler
+                            (progn
+                              (setf (hunchentoot:return-code*) 400)
+                              (encode-api-response (make-api-error "INVALID_URI" "Invalid thread URI"))))))))
+      (handler-case
+          (let ((thread (get-reply-thread root-id)))
+            (encode-api-response
+             (make-api-response (list :thread thread)))))
+        (error (c)
+          (log-error "Get thread error: ~A" c)
+          (setf (hunchentoot:return-code*) 500)
+          (encode-api-response (make-api-error "GET_THREAD_FAILED" (format nil "~A" c)))))))
 
 ;;; End of gateway.lisp

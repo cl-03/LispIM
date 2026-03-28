@@ -13,8 +13,8 @@
 
 (format t "~&Loading lispim-core system...~%")
 (asdf:clear-system :lispim-core)
-(asdf:compile-system :lispim-core :force-all t)
-(asdf:load-system :lispim-core)
+(handler-bind ((warning #'muffle-warning))
+  (asdf:load-system :lispim-core))
 
 (format t "~&Starting server on port 3000...~%~%")
 

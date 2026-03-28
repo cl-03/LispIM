@@ -1147,19 +1147,20 @@
   (declare (type string query)
            (type integer limit))
   (ensure-pg-connected)
+  ;; 支持通过 username、display_name 或用户 ID 搜索
   (let* ((search-pattern (format nil "%%%~a%%" query))
          (rows (postmodern:query
                 "SELECT id, username, display_name, avatar_url
                  FROM users
-                 WHERE (username LIKE $1 OR display_name LIKE $1)
-                   AND status = 'active'
-                 LIMIT $2"
-                search-pattern limit)))
+                 WHERE ((username LIKE $1 OR display_name LIKE $1 OR id::text = $2)
+                   AND status = 'active')
+                 LIMIT $3"
+                search-pattern query limit)))
     (loop for row in rows
           collect (list :id (write-to-string (elt row 0))
                         :username (elt row 1)
                         :display-name (elt row 2)
-                        :avatar-url (elt row 3)))))
+                        :avatar-url (or (elt row 3) "")))))
 
 ;;;; File Upload Operations
 

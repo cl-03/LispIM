@@ -199,9 +199,13 @@ export const useAppStore = create<AppState>()(
       logout: async () => {
         try {
           const api = getApiClient()
-          await api.logout()
+          // 只在 API 已初始化时调用 logout API
+          if (api) {
+            await api.logout()
+          }
         } catch (err) {
-          console.error('Logout error:', err)
+          // 忽略登出错误（可能 API 未初始化或 token 已过期）
+          console.log('[AppStore] Logout API call failed (expected if not authenticated)')
         }
 
         const { ws } = get()

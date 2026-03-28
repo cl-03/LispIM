@@ -254,6 +254,62 @@ interface LispIMApiService {
      */
     @GET("device/fcm-token")
     suspend fun getFcmTokens(@Header("Authorization") token: String): Response<ApiResponse<FcmTokensResponse>>
+
+    // ========== Sync (Incremental) ==========
+
+    /**
+     * Get incremental messages since anchor
+     * GET /api/v1/sync/messages
+     */
+    @GET("sync/messages")
+    suspend fun getIncrementalMessages(
+        @Header("Authorization") token: String,
+        @Query("user_id") userId: String,
+        @Query("anchor_seq") anchorSeq: Long,
+        @Query("batch_size") batchSize: Int = 50
+    ): Response<ApiResponse<SyncMessagesResponse>>
+
+    /**
+     * Get incremental conversations since anchor
+     * GET /api/v1/sync/conversations
+     */
+    @GET("sync/conversations")
+    suspend fun getIncrementalConversations(
+        @Header("Authorization") token: String,
+        @Query("user_id") userId: String,
+        @Query("anchor_seq") anchorSeq: Long
+    ): Response<ApiResponse<SyncConversationsResponse>>
+
+    /**
+     * Get messages before a specific message
+     * GET /api/v1/chat/conversations/{conversationId}/messages/before
+     */
+    @GET("chat/conversations/{conversationId}/messages/before")
+    suspend fun getMessagesBefore(
+        @Header("Authorization") token: String,
+        @Path("conversationId") conversationId: String,
+        @Query("before_id") beforeId: String,
+        @Query("limit") limit: Int = 20
+    ): Response<ApiResponse<MessagesResponse>>
+
+    /**
+     * Download file
+     * GET /api/v1/files/{fileId}/download
+     */
+    @GET("files/{fileId}/download")
+    suspend fun downloadFile(
+        @Header("Authorization") token: String,
+        @Path("fileId") fileId: String
+    ): Response<okhttp3.ResponseBody>
+
+    /**
+     * Get contacts
+     * GET /api/v1/contacts
+     */
+    @GET("contacts")
+    suspend fun getContacts(
+        @Header("Authorization") token: String
+    ): Response<ApiResponse<ContactsResponse>>
 }
 
 // ========== Request/Response Helpers ==========
@@ -330,4 +386,52 @@ data class FcmDevice(
     @SerializedName("fcm-token") val fcmToken: String,
     @SerializedName("device-name") val deviceName: String?,
     @SerializedName("push-enabled") val pushEnabled: Boolean
+)
+
+// ========== Sync Responses ==========
+
+data class SyncMessagesResponse(
+    @SerializedName("messages") val messages: List<SyncMessage>,
+    @SerializedName("sync_anchor") val syncAnchor: Long,
+    @SerializedName("has_more") val hasMore: Boolean
+)
+
+data class SyncConversationsResponse(
+    @SerializedName("conversations") val conversations: List<SyncConversation>,
+    @SerializedName("sync_anchor") val syncAnchor: Long,
+    @SerializedName("has_more") val hasMore: Boolean
+)
+
+data class ContactsResponse(
+    @SerializedName("contacts") val contacts: List<Contact>
+)
+
+data class SyncMessage(
+    @SerializedName("id") val id: String,
+    @SerializedName("conversation_id") val conversationId: String,
+    @SerializedName("sender_id") val senderId: String,
+    @SerializedName("content") val content: String,
+    @SerializedName("type") val type: String,
+    @SerializedName("status") val status: String,
+    @SerializedName("created_at") val createdAt: Long,
+    @SerializedName("sync_seq") val syncSeq: Long
+)
+
+data class SyncConversation(
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("type") val type: String,
+    @SerializedName("last_message_id") val lastMessageId: String?,
+    @SerializedName("last_message_time") val lastMessageTime: Long,
+    @SerializedName("unread_count") val unreadCount: Int,
+    @SerializedName("sync_seq") val syncSeq: Long,
+    @SerializedName("updated_at") val updatedAt: Long
+)
+
+data class Contact(
+    @SerializedName("id") val id: String,
+    @SerializedName("username") val username: String,
+    @SerializedName("display_name") val displayName: String?,
+    @SerializedName("avatar_url") val avatarUrl: String?,
+    @SerializedName("status") val status: String
 )

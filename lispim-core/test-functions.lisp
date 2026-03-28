@@ -1,0 +1,8 @@
+(ql:quickload :lispim-core)
+(in-package :lispim-core)
+(format t "~%~%Checking functions...~%")
+(format t "init-multi-level-cache: ~a~%" (fboundp 'init-multi-level-cache))
+(format t "mlc-get: ~a~%" (fboundp 'mlc-get))
+(format t "init-connection-pool: ~a~%" (fboundp 'init-connection-pool))
+(format t "fulltext-search: ~a~%" (fboundp 'fulltext-search))
+(sb-ext:quit)

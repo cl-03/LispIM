@@ -47,3 +47,43 @@ data class MessageEntity(
     val isRecalled: Boolean = false,
     val localCreatedAt: Long = System.currentTimeMillis()
 )
+
+/**
+ * Offline message entity for local storage
+ */
+@Entity(
+    tableName = "offline_messages",
+    indices = [
+        Index(value = ["id"], unique = true),
+        Index(value = ["status"]),
+        Index(value = ["nextRetryAt"])
+    ]
+)
+data class OfflineMessageEntity(
+    @PrimaryKey(autoGenerate = true) val localId: Long = 0,
+    val id: String,
+    val conversationId: String,
+    val senderId: String,
+    val recipientId: String,
+    val content: String,
+    val messageType: String,
+    val status: String, // pending, sending, sent, failed
+    val retryCount: Int,
+    val createdAt: Long,
+    val nextRetryAt: Long,
+    val lastError: String? = null
+)
+
+/**
+ * Sync anchor entity for tracking sync state
+ */
+@Entity(
+    tableName = "sync_anchors",
+    indices = [Index(value = ["userId"], unique = true)]
+)
+data class SyncAnchorEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: String,
+    val sequence: Long,
+    val updatedAt: Long
+)

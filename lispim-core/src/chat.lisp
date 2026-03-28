@@ -146,7 +146,7 @@
         conv))))
 
 (defun send-message (conversation-id content &key (type :text) attachments mentions reply-to)
-  "发送消息到会话"
+  "发送消息到会话（集成消息状态追踪）"
   (declare (type conversation-id conversation-id)
            (type (or null string) content)
            (type message-type type)
@@ -176,8 +176,9 @@
 
         (let* ((conv (get-conversation conversation-id))
                (seq (get-next-sequence conversation-id))
+               (msg-id (generate-message-id))
                (msg (make-message
-                     :id (generate-message-id)
+                     :id msg-id
                      :sequence seq
                      :conversation-id conversation-id
                      :sender-id *current-user-id*
@@ -187,8 +188,8 @@
                      :mentions mentions
                      :reply-to reply-to)))
 
-          ;; 持久化
-          (store-message msg)
+          ;; 存储消息并设置状态为 :sending
+          (store-message-with-status msg :status :sending)
 
           ;; 更新会话
           (when conv
@@ -200,11 +201,18 @@
           ;; 推送给在线用户
           (push-to-online-users conversation-id msg)
 
+          ;; 创建 ACK 追踪（30 秒超时）
+          (let ((recipients (remove *current-user-id* (conversation-participants conv) :test #'string=)))
+            (when recipients
+              (create-message-ack msg-id recipients :timeout-seconds 30
+                                  :callback (lambda (id status)
+                                              (log-info "ACK callback: message ~a status ~a" id status)))))
+
           ;; 通知 AI 助手（如果启用）
           (when (ai-enabled-p conversation-id)
             (oc-notify-message msg))
 
-          (log-info "Message sent: ~a to conversation ~a" (message-id msg) conversation-id)
+          (log-info "Message sent: ~a to conversation ~a" msg-id conversation-id)
           msg))
     (conversation-not-found (c)
       (log-error "Conversation not found: ~a" (format nil "~A" c))
@@ -250,26 +258,40 @@
 ;;;; 消息推送 - 增强的错误处理
 
 (defun push-to-online-users (conversation-id message)
-  "推送消息到会话中的在线用户"
+  "推送消息到会话中的在线用户（集成状态追踪）"
   (declare (type conversation-id conversation-id)
            (type message message)
            (optimize (speed 2) (safety 2)))
   (let ((conv (get-conversation conversation-id)))
     (when conv
-      (handler-case
-          (dolist (user-id (conversation-participants conv))
-            (let ((conns (get-user-connections user-id)))
-              (dolist (conn conns)
-                (handler-case
-                    (send-to-connection conn (encode-message message))
-                  (connection-error (c)
-                    (log-warn "Failed to send to connection ~a: ~a"
-                              (format nil "~A" c)
-                              (format nil "~A" c)))))))
-        (error (c)
-          (log-error "Push message failed: ~a" c)
-          ;; 将消息加入待发送队列
-          (queue-pending-message conversation-id message))))))
+      (let ((success-p nil)
+            (error-msg nil))
+        (handler-case
+            (progn
+              (dolist (user-id (conversation-participants conv))
+                (let ((conns (get-user-connections user-id)))
+                  (dolist (conn conns)
+                    (handler-case
+                        (progn
+                          (send-to-connection conn (encode-message message))
+                          (setf success-p t))
+                      (connection-error (c)
+                        (log-warn "Failed to send to connection ~a: ~a"
+                                  (format nil "~A" c)
+                                  (format nil "~A" c)))))))
+              ;; 推送成功，更新状态为 :sent
+              (when success-p
+                (update-message-status (message-id message) :sent)))
+          (error (c)
+            (setf error-msg (format nil "~a" c))
+            (log-error "Push message failed: ~a" c)
+            ;; 推送失败，更新状态为 :failed 并加入重试队列
+            (update-message-status (message-id message) :failed
+                                   :error-message error-msg)
+            (enqueue-failed-message (message-id message)
+                                    conversation-id
+                                    (message-content message)
+                                    :type (message-message-type message))))))))
 
 (defun queue-pending-message (conversation-id message)
   "将消息加入待发送队列"

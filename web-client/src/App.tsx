@@ -7,6 +7,8 @@ import Chat from '@/components/Chat'
 import Contacts from '@/components/Contacts'
 import Discover from '@/components/Discover'
 import Profile from '@/components/Profile'
+import ProfileDetail from '@/components/ProfileDetail'
+import Settings from '@/components/Settings'
 import './App.css'
 
 // Main layout with bottom navigation
@@ -28,6 +30,8 @@ function MainLayout() {
           <Route path="/contacts" element={<Contacts />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/detail" element={<ProfileDetail />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </div>
 
@@ -89,20 +93,25 @@ function App() {
   const { isAuthenticated, initWebSocket, token, ws } = useAppStore()
 
   useEffect(() => {
+    // 只在已认证且 token 有效时初始化 WebSocket
     if (isAuthenticated && token && !ws) {
       const wsUrl = (import.meta as any).env.VITE_WS_URL || 'ws://localhost:3000'
       initWebSocket(wsUrl)
     }
-  }, [isAuthenticated, token])
+  }, [isAuthenticated, token, ws, initWebSocket])
 
+  // 未认证时显示登录/注册页面
   if (!isAuthenticated) {
     return (
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/" element={<Navigate to="/login" />} />
-        </Routes>
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </div>
       </BrowserRouter>
     )
   }

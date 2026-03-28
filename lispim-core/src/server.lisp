@@ -53,8 +53,64 @@
   (init-storage (config-database-url config)
                 (config-redis-url config))
 
+  ;; 确保消息状态列存在（migration 004）
+  (ensure-message-status-column)
+
   ;; 初始化消息序列计数器（从数据库恢复）
   (initialize-sequence-counters)
+
+  ;; 启动消息重试工作线程
+  (start-retry-worker)
+
+  ;; 初始化连接池
+  (init-connection-pool :max-size (config-max-connections config))
+
+  ;; 启动健康监控
+  (start-health-monitor)
+
+  ;; 初始化多级缓存
+  (init-multi-level-cache
+   :l1-max-size 10000
+   :bloom-size 1000000
+   :redis-host "localhost"
+   :redis-port 6379)
+
+  ;; 初始化离线消息队列
+  (init-offline-queue :redis-host "localhost" :redis-port 6379)
+
+  ;; 启动离线队列工作线程
+  (start-offline-queue-worker)
+
+  ;; 初始化客户端增量同步
+  (init-sync)
+
+  ;; 初始化 Redis Streams 消息队列
+  (init-message-queue :redis-host "localhost" :redis-port 6379)
+
+  ;; 启动消息消费者
+  (start-message-consumer)
+
+  ;; 初始化多实例集群
+  (init-cluster :redis-host "localhost" :redis-port 6379
+                :host (config-host config) :port (config-port config))
+
+  ;; 初始化 CDN 存储
+  (init-cdn-storage :provider :minio)
+
+  ;; 初始化数据库读写分离（可选）
+  ;; (init-db-replica :master-host "localhost" :master-port 5432
+  ;;                  :slaves-config '(:connections
+  ;;                                   ((:host "localhost" :port 5433 :database "lispim"
+  ;;                                     :user "lispim" :password "Clsper03"))))
+
+  ;; 初始化全文搜索
+  (init-search "localhost" 6379)
+
+  ;; 初始化消息去重
+  (init-message-dedup :window-size 10000 :window-ttl 3600 :bloom-size 1000000)
+
+  ;; 初始化速率限制
+  (init-rate-limiting :default-rate 100 :default-burst 200)
 
   ;; 初始化可观测性
   (init-observability :log-level (config-log-level config))
@@ -113,6 +169,31 @@
 
   ;; 停止网关
   (stop-gateway)
+
+  ;; 停止消息重试工作线程
+  (stop-retry-worker)
+
+  ;; 停止离线队列工作线程
+  (stop-offline-queue-worker)
+
+  ;; 停止消息消费者
+  (stop-message-consumer)
+
+  ;; 停止集群
+  (shutdown-cluster)
+
+  ;; 停止全文搜索
+  (shutdown-fulltext-search)
+
+  ;; 停止消息去重清理工作线程
+  (stop-dedup-cleanup-worker)
+
+  ;; 停止健康监控
+  ;; (Note: health monitor thread would need a stop flag - for now we just log)
+
+  ;; 清理缓存
+  (when *multi-level-cache*
+    (log-info "Shutting down multi-level cache..."))
 
   ;; 关闭 OpenClaw 适配器
   (when *oc-connected*

@@ -323,7 +323,7 @@
 (defconstant +seconds-per-hour+ 3600)
 (defconstant +minutes-per-hour+ 60)
 
-(defmacro with-timing ((var &optional (format-str "~a")) &body body)
+(defmacro with-timing ((var &optional (format-str nil)) &body body)
   "计算执行时间"
   (let ((start-sym (gensym "START")))
     `(let ((,start-sym (get-internal-real-time)))
@@ -331,7 +331,9 @@
            (progn ,@body)
          (let ((,var (/ (- (get-internal-real-time) ,start-sym)
                         internal-time-units-per-second)))
-           (log-debug (format nil ,format-str "~fs" ,var)))))))
+           (if ,format-str
+               (log-debug "Timing: ~a~f seconds" ,format-str ,var)
+               (log-debug "Timing: ~f seconds" ,var)))))))
 
 ;;;; 字节序工具 - 增强的字节操作
 

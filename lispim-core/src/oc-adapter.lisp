@@ -34,36 +34,36 @@
 (defvar *oc-capabilities* nil
   "OpenClaw 能力缓存")
 
-;;;; 速率限制器
+;;;; 速率限制器 (OpenClaw 专用)
 
-(defstruct rate-limiter
-  "令牌桶速率限制器"
+(defstruct oc-rate-limiter
+  "OpenClaw 令牌桶速率限制器"
   (capacity 60 :type integer)
   (tokens 60.0 :type float)
   (last-refill (get-universal-time) :type integer)
-  (lock (bordeaux-threads:make-lock "rate-limiter-lock") :type bordeaux-threads:lock))
+  (lock (bordeaux-threads:make-lock "oc-rate-limiter-lock") :type bordeaux-threads:lock))
 
-(defvar *oc-rate-limiter* (make-rate-limiter)
+(defvar *oc-rate-limiter* (make-oc-rate-limiter)
   "OpenClaw 速率限制器")
 
-(defun rate-limit-allow-p (limiter)
+(defun oc-rate-limit-allow-p (limiter)
   "检查是否允许请求（令牌桶算法）"
-  (declare (type rate-limiter limiter)
+  (declare (type oc-rate-limiter limiter)
            (optimize (speed 3) (safety 1)))
-  (bordeaux-threads:with-lock-held ((rate-limiter-lock limiter))
+  (bordeaux-threads:with-lock-held ((oc-rate-limiter-lock limiter))
     (let* ((now (get-universal-time))
-           (elapsed (- now (rate-limiter-last-refill limiter)))
+           (elapsed (- now (oc-rate-limiter-last-refill limiter)))
            (refill-rate 1.0))  ; 每秒补充 1 个令牌
       ;; 补充令牌
-      (setf (rate-limiter-tokens limiter)
-            (min (coerce (rate-limiter-capacity limiter) 'float)
-                 (+ (rate-limiter-tokens limiter)
+      (setf (oc-rate-limiter-tokens limiter)
+            (min (coerce (oc-rate-limiter-capacity limiter) 'float)
+                 (+ (oc-rate-limiter-tokens limiter)
                     (* elapsed refill-rate))))
-      (setf (rate-limiter-last-refill limiter) now)
+      (setf (oc-rate-limiter-last-refill limiter) now)
       ;; 消耗令牌
-      (if (>= (rate-limiter-tokens limiter) 1.0)
+      (if (>= (oc-rate-limiter-tokens limiter) 1.0)
           (progn
-            (decf (rate-limiter-tokens limiter))
+            (decf (oc-rate-limiter-tokens limiter))
             t)
           nil))))
 
@@ -120,7 +120,7 @@
            (type string message))
 
   ;; 速率限制检查
-  (unless (rate-limit-allow-p *oc-rate-limiter*)
+  (unless (oc-rate-limit-allow-p *oc-rate-limiter*)
     (error "OpenClaw rate limit exceeded"))
 
   ;; 本地上下文摘要

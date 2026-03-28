@@ -1,0 +1,5 @@
+(ql:quickload :lispim-core)
+(in-package :lispim-core)
+(format t "~%~%Checking init-multi-level-cache...~%")
+(format t "Function: ~a~%" #'init-multi-level-cache)
+(quit)
