@@ -175,8 +175,8 @@
                    :position position
                    :is-muted is-muted
                    :member-count member-count
-                   :created-at created-at))))
-              results)))
+                   :created-at created-at)))
+              results))))
 
 (defun get-channel-by-id (channel-id)
   "根据 ID 获取频道"
@@ -188,7 +188,7 @@
                                  position, is_muted, member_count,
                                  EXTRACT(EPOCH FROM created_at)::INTEGER
                           FROM group_channels
-                          WHERE id = $1"
+                          WHERE id = ~A"
                          channel-id)
                  :single)))
     (when result
@@ -299,13 +299,13 @@
   (declare (type string user-id)
            (type integer channel-id))
   (with-redis-lock ()
-    (redis-set (format nil "lispim:user:channel:~A" user-id) channel-id)))
+    (redis-set "lispim:user:channel" user-id (write-to-string channel-id))))
 
 (defun get-user-current-channel (user-id)
   "获取用户当前频道"
   (declare (type string user-id))
   (with-redis-lock ()
-    (let ((result (redis-get (format nil "lispim:user:channel:~A" user-id))))
+    (let ((result (redis-get "lispim:user:channel" user-id)))
       (when result (parse-integer result)))))
 
 ;;;; 辅助函数

@@ -351,9 +351,9 @@
         (push (get-universal-time) params)
         (push user-id params)
 
-        (let ((sql (format nil "UPDATE users SET ~a, updated_at = $~a WHERE id = $~a"
-                           (format nil "~{~a~^, ~}" (nreverse updates))
-                           param-idx (1+ param-idx))))
+        (let ((sql (format nil "UPDATE users SET ~{~a~^, ~} WHERE id = $~a"
+                           (nreverse updates)
+                           param-idx)))
           (postmodern:query sql params)))
 
       (get-user user-id))))
@@ -387,13 +387,16 @@
 
     ;; Cache in Redis
     (when *redis-connected*
-      (redis-set "session" session-id (cl-json:encode-json-to-string
-                                        (list :session-id session-id
-                                              :user-id user-id
-                                              :username username
-                                              :expires-at expires))
-                 :expires (- expires (get-universal-time)))
-      (redis-expire-at "session" unix-time))
+      (let* ((session-data (list :session-id session-id
+                                 :user-id user-id
+                                 :username username
+                                 :expires-at expires))
+             (json-str (cl-json:encode-json-to-string session-data)))
+        (log-info "Storing session in Redis: session-id=~A, user-id=~A (type: ~A), json=~A"
+                  session-id user-id (type-of user-id) json-str)
+        (redis-set "session" session-id json-str
+                   :expires (- expires (get-universal-time)))
+        (redis-expire-at "session" unix-time)))
 
     (log-info "Created session: ~a for user ~a" session-id user-id)
     session-id))
@@ -417,8 +420,11 @@
                      (push (cdr item) result))
                     ((string= (car item) "userId")
                      (push :user-id result)
-                     ;; Remove extra quotes from user-id if present
-                     (push (remove-prefix (remove-prefix (cdr item) "\"") "\"") result))
+                     ;; Handle both string and number types - convert to string
+                     (push (if (stringp (cdr item))
+                               (remove-prefix (remove-prefix (cdr item) "\"") "\"")
+                               (write-to-string (cdr item)))
+                           result))
                     ((string= (car item) "username")
                      (push :username result)
                      (push (cdr item) result))
@@ -442,7 +448,7 @@
     (when result
       (let ((row (car result)))
         (list :session-id (elt row 0)
-              :user-id (elt row 1)
+              :user-id (write-to-string (elt row 1))
               :username (elt row 2)
               :ip-address (elt row 3)
               :user-agent (elt row 4)

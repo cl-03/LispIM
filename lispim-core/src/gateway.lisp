@@ -220,7 +220,7 @@
   "Download image from URL to file path"
   (declare (type string url file-path))
   (handler-case
-      (let ((response (drakma:http-get url :want-stream t)))
+      (let ((response (drakma:http-request url :want-stream t)))
         (when (and (consp response)
                    (eq (car response) 200))
           (let ((stream (cdr response)))
@@ -5788,7 +5788,7 @@ lispim_uptime ~a~%"
       (error (c)
         (log-error "Join via invite error: ~A" c)
         (setf (hunchentoot:return-code*) 500)
-        (encode-api-response (make-api-error "INTERNAL_ERROR" (format nil "~A" c)))))))))
+        (encode-api-response (make-api-error "INTERNAL_ERROR" (format nil "~A" c))))))))
 
 ;; POST /api/v1/groups/invite-links/:id/revoke - Revoke invite link
 (defun api-revoke-invite-link-handler ()
@@ -5825,7 +5825,7 @@ lispim_uptime ~a~%"
       (error (c)
         (log-error "Revoke invite link error: ~A" c)
         (setf (hunchentoot:return-code*) 500)
-        (encode-api-response (make-api-error "INTERNAL_ERROR" (format nil "~A" c)))))))))
+        (encode-api-response (make-api-error "INTERNAL_ERROR" (format nil "~A" c))))))))
 
 ;;;; ============================================================================
 ;;;; Favorites API (收藏管理)
@@ -6792,10 +6792,10 @@ lispim_uptime ~a~%"
        ;; Get privacy settings
        (handler-case
            (let* ((settings (get-user-privacy-settings user-id))
-                  (result `((:hideOnlineStatus . ,(user-privacy-settings-hide-online-status settings))
-                            (:hideReadReceipt . ,(user-privacy-settings-hide-read-receipt settings))
-                            (:showProfilePhoto . ,(user-privacy-settings-show-profile-photo settings))
-                            (:showLastSeen . ,(user-privacy-settings-show-last-seen settings)))))
+                  (result (list :hide-online-status (user-privacy-settings-hide-online-status settings)
+                                :hide-read-receipt (user-privacy-settings-hide-read-receipt settings)
+                                :show-profile-photo (user-privacy-settings-show-profile-photo settings)
+                                :show-last-seen (user-privacy-settings-show-last-seen settings))))
              (encode-api-response (make-api-response result)))
          (error (c)
            (log-error "Get privacy settings error: ~A" c)
@@ -6804,15 +6804,29 @@ lispim_uptime ~a~%"
       ((string= (hunchentoot:request-method hunchentoot:*request*) "PUT")
        ;; Update privacy settings
        (handler-case
-           (let* ((data (parse-body-json)))
+           (let* ((json-str (get-request-body-string))
+                  (data (cl-json:decode-json-from-string json-str))
+                  ;; Use assoc to check if key exists, then get value
+                  (hide-online-status-cell (assoc :hide-online-status data))
+                  (hide-read-receipt-cell (assoc :hide-read-receipt data))
+                  (show-profile-photo-cell (assoc :show-profile-photo data))
+                  (show-last-seen-cell (assoc :show-last-seen data)))
+             (log-info "PUT /api/v1/privacy/settings - user=~A, json=~A, data=~A" user-id json-str data)
+             (log-info "Cells: hide-online=~A, hide-read=~A, show-photo=~A, show-seen=~A"
+                       hide-online-status-cell
+                       hide-read-receipt-cell
+                       show-profile-photo-cell
+                       show-last-seen-cell)
+             ;; Use cell to distinguish missing key from false value
              (set-user-privacy-settings
               user-id
-              :hide-online-status (cdr (assoc :hideOnlineStatus data))
-              :hide-read-receipt (cdr (assoc :hideReadReceipt data))
-              :show-profile-photo (cdr (assoc :showProfilePhoto data))
-              :show-last-seen (cdr (assoc :showLastSeen data)))
-             (encode-api-response
-              (make-api-response `((:success . t)))))
+              :hide-online-status (if hide-online-status-cell (cdr hide-online-status-cell) :unset)
+              :hide-read-receipt (if hide-read-receipt-cell (cdr hide-read-receipt-cell) :unset)
+              :show-profile-photo (if show-profile-photo-cell (cdr show-profile-photo-cell) :unset)
+              :show-last-seen (if show-last-seen-cell (cdr show-last-seen-cell) :unset))
+             (let ((response (make-api-response (list :success t))))
+               (log-info "API response: ~A" response)
+               (encode-api-response response)))
          (error (c)
            (log-error "Update privacy settings error: ~A" c)
            (setf (hunchentoot:return-code*) 500)
@@ -6838,8 +6852,8 @@ lispim_uptime ~a~%"
           (encode-api-response (make-api-error "MISSING_FIELDS" "User ID required"))))
       (handler-case
           (let* ((settings (get-user-privacy-settings target-user-id))
-                 (result `((:canShowProfilePhoto . ,(user-privacy-settings-show-profile-photo settings))
-                           (:canShowLastSeen . ,(user-privacy-settings-show-last-seen settings)))))
+                 (result (list :canShowProfilePhoto (user-privacy-settings-show-profile-photo settings)
+                               :canShowLastSeen (user-privacy-settings-show-last-seen settings))))
             (encode-api-response (make-api-response result)))
         (error (c)
           (log-error "Get user privacy settings error: ~A" c)
@@ -6960,7 +6974,7 @@ lispim_uptime ~a~%"
                          (broadcast-to-conversation
                           conversation-id
                           (encode-ws-message
-                           `(:type :message:reaction
+                           `(:type "message-reaction"
                              :message-id ,message-id
                              :reactions ,reactions)))))
                      (encode-api-response
@@ -6986,7 +7000,7 @@ lispim_uptime ~a~%"
                    (broadcast-to-conversation
                     conversation-id
                     (encode-ws-message
-                     `(:type :message:reaction
+                     `(:type "message-reaction"
                        :message-id ,message-id
                        :reactions ,reactions)))))
                (encode-api-response

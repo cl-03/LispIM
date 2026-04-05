@@ -517,72 +517,75 @@
 
   ;; 查数据库
   (ensure-pg-connected)
-  (let ((row (postmodern:query
-              "SELECT hide_online_status, hide_read_receipt,
+  (let* ((sql "SELECT hide_online_status, hide_read_receipt,
                       COALESCE((privacy_settings->>'show_profile_photo')::boolean, true) as show_profile_photo,
                       COALESCE((privacy_settings->>'show_last_seen')::boolean, true) as show_last_seen
-               FROM users WHERE id = $1"
-              user-id)))
-    (if row
-        (let* ((hide-online (caar row))
-               (hide-read (cadar row))
-               (show-photo (cadddr (car row)))
-               (show-seen (car (last (car row)))))
-          (bordeaux-threads:with-lock-held (*user-privacy-settings-lock*)
-            (let ((settings (make-user-privacy-settings
-                             :hide-online-status (if hide-online t nil)
-                             :hide-read-receipt (if hide-read t nil)
-                             :show-profile-photo (if show-photo t nil)
-                             :show-last-seen (if show-seen t nil))))
-              (setf (gethash user-id *user-privacy-settings-cache*) settings)
-              settings)))
-        ;; 默认设置
-        (make-user-privacy-settings))))
+               FROM users WHERE id = ~a")
+         (query (format nil sql user-id)))
+    (log-info "GET privacy settings SQL: ~A" query)
+    (let ((row (postmodern:query query)))
+      (log-info "GET privacy settings result: ~A" row)
+      (if row
+          (let* ((hide-online (caar row))
+                 (hide-read (cadar row))
+                 (show-photo (cadddr (car row)))
+                 (show-seen (car (last (car row)))))
+            (bordeaux-threads:with-lock-held (*user-privacy-settings-lock*)
+              (let ((settings (make-user-privacy-settings
+                               :hide-online-status (if hide-online t nil)
+                               :hide-read-receipt (if hide-read t nil)
+                               :show-profile-photo (if show-photo t nil)
+                               :show-last-seen (if show-seen t nil))))
+                (setf (gethash user-id *user-privacy-settings-cache*) settings)
+                settings)))
+          ;; 默认设置
+          (make-user-privacy-settings)))))
 
 ;; 更新用户隐私设置
 (defun set-user-privacy-settings (user-id &key hide-online-status hide-read-receipt show-profile-photo show-last-seen)
   "更新用户的隐私设置"
-  (declare (type string user-id)
-           (type (or boolean null) hide-online-status)
-           (type (or boolean null) hide-read-receipt)
-           (type (or boolean null) show-profile-photo)
-           (type (or boolean null) show-last-seen))
+  (declare (type string user-id))
 
+  (log-info "set-user-privacy-settings called with user-id=~A (type: ~A)" user-id (type-of user-id))
   (ensure-pg-connected)
 
-  ;; 构建更新 SQL
-  (let ((updates nil)
-        (params nil)
-        (param-idx 1))
-    (when (booleanp hide-online-status)
-      (push (format nil "hide_online_status = $~a" param-idx) updates)
-      (push hide-online-status params)
-      (incf param-idx))
-    (when (booleanp hide-read-receipt)
-      (push (format nil "hide_read_receipt = $~a" param-idx) updates)
-      (push hide-read-receipt params)
-      (incf param-idx))
-    (when (booleanp show-profile-photo)
-      (push (format nil "privacy_settings = jsonb_set(COALESCE(privacy_settings, '{}'), '{show_profile_photo}', $~a)" param-idx) updates)
-      (push (if show-profile-photo "true" "false") params)
-      (incf param-idx))
-    (when (booleanp show-last-seen)
-      (push (format nil "privacy_settings = jsonb_set(COALESCE(privacy_settings, '{}'), '{show_last_seen}', $~a)" param-idx) updates)
-      (push (if show-last-seen "true" "false") params)
-      (incf param-idx))
+  ;; 构建更新 SQL - use literal values instead of parameters to work around postmodern param issue
+  (let ((set-clauses nil))
+    ;; Update hide_online_status if provided (including explicit false, but not :unset)
+    (unless (eq hide-online-status :unset)
+      (push (format nil "hide_online_status = ~a" (if hide-online-status "TRUE" "FALSE")) set-clauses))
+    ;; Update hide_read_receipt if provided (including explicit false, but not :unset)
+    (unless (eq hide-read-receipt :unset)
+      (push (format nil "hide_read_receipt = ~a" (if hide-read-receipt "TRUE" "FALSE")) set-clauses))
+    ;; Update privacy_settings JSONB if show-profile-photo or show-last-seen is provided
+    (unless (and (eq show-profile-photo :unset) (eq show-last-seen :unset))
+      (let ((jsonb-expr "COALESCE(privacy_settings, '{}')"))
+        (unless (eq show-profile-photo :unset)
+          (setf jsonb-expr (format nil "jsonb_set(~a, '{show_profile_photo}', ~a)" jsonb-expr
+                                   (if show-profile-photo "'true'" "'false'"))))
+        (unless (eq show-last-seen :unset)
+          (setf jsonb-expr (format nil "jsonb_set(~a, '{show_last_seen}', ~a)" jsonb-expr
+                                   (if show-last-seen "'true'" "'false'"))))
+        (push (format nil "privacy_settings = ~a" jsonb-expr) set-clauses)))
 
-    (when updates
-      ;; 合并 privacy_settings 更新
-      (let ((final-sql (format nil "UPDATE users SET ~{~a~^, ~} WHERE id = $~a"
-                               updates param-idx)))
-        (postmodern:query final-sql (nreverse (append params (list user-id)))))
+    (when set-clauses
+      (let* ((clauses (nreverse set-clauses))
+             (sql (format nil "UPDATE users SET ~{~a~^, ~} WHERE id = ~a" clauses user-id)))
+        (log-info "Executing SQL: ~A" sql)
+        ;; postmodern:query returns number of affected rows for UPDATE statements
+        (handler-case
+            (let ((result (postmodern:query sql)))
+              (log-info "SQL executed successfully, rows affected: ~A" result))
+          (postmodern:database-error (c)
+            (log-error "SQL execution error: ~A" c)
+            (error "Database error: ~A" c)))))
 
-      ;; 清除缓存
-      (bordeaux-threads:with-lock-held (*user-privacy-settings-lock*)
-        (remhash user-id *user-privacy-settings-cache*))
+  ;; 清除缓存
+  (bordeaux-threads:with-lock-held (*user-privacy-settings-lock*)
+    (remhash user-id *user-privacy-settings-cache*))
 
-      (log-info "Updated privacy settings for user ~a" user-id)
-      t)))
+  (log-info "Updated privacy settings for user ~a" user-id)
+  t))
 
 ;; 检查用户是否隐藏在线状态
 (defun user-hides-online-status (user-id)
