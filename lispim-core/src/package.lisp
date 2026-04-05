@@ -106,6 +106,8 @@
 
 (defpackage :lispim-core
   (:use :cl :alexandria :serapeum :local-time)
+  (:shadow #:room)
+  (:import-from :cl-ppcre :register-groups-bind)
   (:import-from :lispim-core/conditions
                 ;; Base conditions
                 #:lispim-error
@@ -230,6 +232,7 @@
    #:register-user
    #:register-by-phone
    #:register-by-email
+   #:register-anonymous-user
    #:send-phone-code
    #:send-email-code
    #:create-session
@@ -265,7 +268,28 @@
    #:get-history
    #:mark-as-read
    #:recall-message
+   #:edit-message
    #:broadcast-message
+   #:push-to-online-users
+   #:push-to-online-user
+   ;; WebSocket Protocol v1
+   #:send-ws-message
+   #:process-ws-message
+   #:receive-from-connection
+   #:+ws-msg-auth+
+   #:+ws-msg-auth-response+
+   #:+ws-msg-message+
+   #:+ws-msg-message-received+
+   #:+ws-msg-message-delivered+
+   #:+ws-msg-message-read+
+   #:+ws-msg-ping+
+   #:+ws-msg-pong+
+   #:+ws-msg-error+
+   #:+ws-msg-notification+
+   #:+ws-msg-presence+
+   #:+ws-msg-typing+
+   #:make-ws-message
+   #:encode-ws-message
    ;; Module management
    #:load-module
    #:unload-module
@@ -297,6 +321,127 @@
    #:lispim-hash-table-alist
    #:lispim-hash-table-merge
    #:lispim-hash-table-filter
+   ;; Middleware (new)
+   #:middleware-pipeline
+   #:middleware-entry
+   #:make-pipeline
+   #:add-middleware
+   #:remove-middleware
+   #:enable-middleware
+   #:disable-middleware
+   #:execute-pipeline
+   #:register-default-middleware
+   #:clear-all-middleware
+   #:list-middleware
+   #:get-middleware-status
+   #:*websocket-pipeline*
+   #:*pipeline-registry*
+   #:middleware-pipeline-middlewares
+   #:middleware-pipeline-lock
+   #:middleware-pipeline-enabled
+   #:middleware-entry-name
+   #:middleware-entry-handler
+   #:middleware-entry-order
+   #:middleware-entry-enabled
+   ;; Middleware handlers
+   #:authentication-middleware
+   #:rate-limit-middleware
+   #:logging-middleware
+   #:compression-middleware
+   #:validation-middleware
+   ;; Room management (new)
+   #:room-id
+   #:room-type
+   #:room
+   #:room-membership
+   #:*rooms*
+   #:*user-rooms*
+   #:*room-online-cache*
+   #:*room-online-cache-expire*
+   #:create-room
+   #:destroy-room
+   #:get-room
+   #:room-exists-p
+   #:create-temporary-room
+   #:temporary-room-p
+   #:join-room
+   #:leave-room
+   #:remove-from-room
+   #:get-room-members
+   #:get-room-member-count
+   #:get-user-rooms
+   #:is-member-of-room-p
+   #:get-user-room-role
+   #:set-room-member-role
+   #:can-send-message-p
+   #:can-kick-member-p
+   #:broadcast-to-room
+   #:broadcast-to-room-except-sender
+   #:get-room-online-members
+   #:get-room-online-count
+   #:get-room-online-members-cached
+   #:get-room-stats
+   #:*rooms-created-counter*
+   #:*rooms-active-gauge*
+   #:cleanup-temporary-rooms
+   ;; Commands (new)
+   #:define-command
+   #:register-command
+   #:parse-command
+   #:parse-command-args
+   #:execute-command
+   #:send-command-message
+   #:list-commands
+   #:get-command-help
+   #:get-commands-stats
+   #:init-system-commands
+   #:*commands-executed-counter*
+   #:*commands-stats*
+   #:*system-commands*
+   #:*command-aliases*
+   ;; Reactions (new)
+   #:emoji
+   #:reaction-id
+   #:message-reaction
+   #:init-reactions
+   #:init-reactions-db
+   #:add-reaction
+   #:remove-reaction
+   #:get-message-reactions
+   #:get-message-reaction-count
+   #:user-has-reacted-p
+   #:get-user-reactions
+   #:send-message-with-reaction
+   #:cleanup-message-reactions
+   #:get-suggested-reactions
+   #:*common-emojis*
+   #:get-reactions-stats
+   #:*message-reactions*
+   #:*reactions-counter*
+   ;; Room management (new)
+   ;; Online cache (new)
+   #:get-room-online-members-wrapper
+   #:init-online-cache
+   #:get-online-cache-stats
+   #:online-cache
+   #:*online-cache*
+   #:*online-cache-worker*
+   #:*online-cache-running*
+   #:*online-cache-config*
+   #:online-cache-get
+   #:online-cache-put
+   #:online-cache-invalidate
+   #:online-cache-clear
+   #:compute-members-cache-key
+   #:redis-get-online-cache
+   #:redis-set-online-cache
+   #:start-online-cache-cleanup
+   #:stop-online-cache-cleanup
+   #:reset-online-cache-stats
+   #:shrink-online-cache
+   #:cleanup-expired-cache
+   #:string-hash
+   #:online-cache-hit-rate
    ;; Conditions
    #:lispim-error
    #:connection-error
@@ -327,10 +472,13 @@
    #:get-or-create-system-admin-conversation
    #:create-system-admin-conversation-for-user
    #:ensure-system-admin-exists
+   #:ensure-default-users-exist
    #:get-conversations
    #:get-friends
+   #:delete-friend
    #:add-friend-request
    #:accept-friend-request
+   #:reject-friend-request
    #:get-friend-requests
    #:search-users
    #:update-user
@@ -578,7 +726,334 @@
    #:delete-reply-thread
    #:create-message-reply
    #:get-message-reply-info
-   #:*message-reply-config*))
+   #:*message-reply-config*
+   ;; QR Code Services (扫一扫)
+   #:generate-qr-code
+   #:decode-and-verify-qr
+   #:generate-group-qr-code
+   #:*qr-secret-key*
+   #:*qr-expiry-seconds*
+   ;; Location Services (附近的人)
+   #:store-user-location
+   #:get-user-location
+   #:delete-user-location
+   #:get-nearby-users
+   #:get-nearby-users-by-city
+   #:set-location-privacy
+   #:is-location-visible
+   #:calculate-distance
+   #:*location-ttl*
+   #:*nearby-max-results*
+   ;; Moments (朋友圈)
+   #:ensure-moments-table-exists
+   #:create-moment-post
+   #:get-moment-post
+   #:delete-moment-post
+   #:get-moment-feed
+   #:get-moment-comments
+   #:get-moment-likes
+   #:like-moment-post
+   #:unlike-moment-post
+   #:add-moment-comment
+   #:delete-moment-comment
+   #:*moment-max-photos*
+   #:*moment-feed-page-size*
+   #:*moment-ttl*
+   ;; Contacts (通讯录)
+   #:ensure-contacts-tables-exist
+   #:create-contact-group
+   #:get-contact-groups
+   #:update-contact-group
+   #:delete-contact-group
+   #:add-friend-to-group
+   #:remove-friend-from-group
+   #:get-group-members
+   #:get-friend-groups
+   #:create-contact-tag
+   #:get-contact-tags
+   #:update-contact-tag
+   #:delete-contact-tag
+   #:add-tag-to-friend
+   #:remove-tag-from-friend
+   #:get-friend-tags
+   #:set-contact-remark
+   #:get-contact-remark
+   #:add-to-blacklist
+   #:remove-from-blacklist
+   #:get-blacklist
+   #:is-blocked
+   #:add-star-contact
+   #:remove-star-contact
+   #:get-star-contacts
+   #:is-star-contact
+   #:search-contacts
+   #:*max-contact-groups*
+   #:*max-contact-tags*
+   ;; File Transfer (大文件传输)
+   #:ensure-file-transfer-tables-exist
+   #:init-file-transfer
+   #:get-file-transfer
+   #:update-file-transfer-status
+   #:record-file-chunk
+   #:get-uploaded-chunks
+   #:is-chunk-uploaded-p
+   #:delete-file-transfer
+   #:update-upload-progress
+   #:get-upload-progress
+   #:generate-chunk-id
+   #:get-chunk-storage-path
+   #:get-file-storage-path
+   #:calculate-file-hash
+   #:merge-file-chunks
+   #:start-file-cleanup-worker
+   #:stop-file-cleanup-worker
+   #:*max-file-size*
+   #:*chunk-size*
+   #:*file-ttl*
+   ;; Group (群聊)
+   #:ensure-group-tables-exist
+   #:create-group
+   #:get-group
+   #:update-group
+   #:delete-group
+   #:add-group-member
+   #:remove-group-member
+   #:get-group-members
+   #:get-user-groups
+   #:get-group-member
+   #:update-group-member-role
+   #:set-member-nickname
+   #:set-member-quiet
+   #:log-group-admin-action
+   #:is-group-owner-p
+   #:is-group-admin-p
+   #:is-group-member-p
+   #:can-invite-p
+   ;; Group invite links (群邀请链接)
+   #:group-invite-link
+   #:make-group-invite-link
+   #:group-invite-link-id
+   #:group-invite-link-group-id
+   #:group-invite-link-code
+   #:group-invite-link-created-by
+   #:group-invite-link-max-uses
+   #:group-invite-link-used-count
+   #:group-invite-link-expires-at
+   #:group-invite-link-revoked-at
+   #:group-invite-link-created-at
+   #:generate-invite-code
+   #:create-group-invite-link
+   #:get-invite-link-by-code
+   #:get-invite-link-by-id
+   #:validate-invite-link
+   #:join-group-via-invite
+   #:revoke-invite-link
+   #:get-group-invite-links
+   #:notify-group-member-joined
+   #:get-conversation-id-by-group-id
+   ;; Favorites (收藏夹)
+   #:ensure-favorites-tables-exist
+   #:add-favorite
+   #:remove-favorite
+   #:get-favorites
+   #:get-favorite
+   #:update-favorite
+   #:create-favorite-category
+   #:get-favorite-categories
+   #:update-favorite-category
+   #:delete-favorite-category
+   ;; Call (语音/视频通话)
+   #:ensure-call-tables-exist
+   #:create-call
+   #:get-call
+   #:update-call-status
+   #:get-user-calls
+   #:redis-call-signaling-channel
+   #:publish-call-offer
+   #:publish-call-answer
+   #:publish-ice-candidate
+   #:subscribe-call-signaling
+   ;; Privacy (隐私增强)
+   #:ensure-disappearing-message-tables-exist
+   #:*disappearing-message-timers*
+   #:*default-disappearing-timer*
+   #:*delete-for-everyone-time-limit*
+   #:*metadata-minimization-enabled*
+   #:*minimal-metadata-retention-period*
+   #:disappearing-message-config
+   #:make-disappearing-message-config
+   #:disappearing-message-config-enabled
+   #:disappearing-message-config-timer-seconds
+   #:disappearing-message-config-timer-start
+   #:set-conversation-disappearing-messages
+   #:get-conversation-disappearing-config
+   #:schedule-message-deletion
+   #:start-disappearing-message-worker
+   #:stop-disappearing-message-worker
+   #:cleanup-expired-messages
+   #:delete-message-for-all
+   #:delete-message-for-self
+   #:notify-message-deleted
+   #:authenticate-minimal
+   #:log-minimal-connection-info
+   #:cleanup-old-metadata
+   #:start-metadata-cleanup-worker
+   #:get-privacy-stats
+   #:init-privacy-features
+   #:shutdown-privacy-features
+   ;; Privacy settings
+   #:user-privacy-settings
+   #:make-user-privacy-settings
+   #:user-privacy-settings-hide-online-status
+   #:user-privacy-settings-hide-read-receipt
+   #:user-privacy-settings-show-profile-photo
+   #:user-privacy-settings-show-last-seen
+   #:get-user-privacy-settings
+   #:set-user-privacy-settings
+   #:user-hides-online-status
+   #:user-hides-read-receipt
+   #:can-show-user-profile-photo
+   #:can-show-user-last-seen
+   #:clear-user-privacy-settings-cache
+   ;; Notification
+   #:user-notification
+   #:make-user-notification
+   #:user-notification-id
+   #:user-notification-user-id
+   #:user-notification-type
+   #:user-notification-title
+   #:user-notification-content
+   #:user-notification-data
+   #:user-notification-priority
+   #:user-notification-created-at
+   #:user-notification-read-p
+   #:user-notification-delivered-p
+   #:notification-preferences
+   #:make-notification-preferences
+   #:notification-preferences-user-id
+   #:notification-preferences-enable-desktop
+   #:notification-preferences-enable-sound
+   #:notification-preferences-enable-badge
+   #:notification-preferences-message-notifications
+   #:notification-preferences-call-notifications
+   #:notification-preferences-friend-request-notifications
+   #:notification-preferences-group-notifications
+   #:notification-preferences-quiet-mode
+   #:notification-preferences-quiet-start
+   #:notification-preferences-quiet-end
+   #:get-notification-preferences
+   #:set-notification-preferences
+   #:in-quiet-mode-p
+   #:save-fcm-token
+   #:remove-fcm-token
+   #:get-user-fcm-tokens
+   #:create-notification
+   #:send-push-notification
+   #:get-user-notifications
+   #:mark-notification-read
+   #:mark-all-notifications-read
+   #:init-notification-system
+   #:ensure-notification-tables-exist
+   ;; Webhook
+   #:webhook
+   #:make-webhook
+   #:webhook-id
+   #:webhook-name
+   #:webhook-url
+   #:webhook-secret
+   #:webhook-events
+   #:webhook-enabled
+   #:webhook-content-type
+   #:webhook-headers
+   #:webhook-retry-count
+   #:webhook-timeout-seconds
+   #:webhook-created-at
+   #:webhook-updated-at
+   #:webhook-last-triggered-at
+   #:webhook-success-count
+   #:webhook-failure-count
+   #:webhook-delivery
+   #:make-webhook-delivery
+   #:webhook-delivery-id
+   #:webhook-delivery-webhook-id
+   #:webhook-delivery-event-type
+   #:webhook-delivery-payload
+   #:webhook-delivery-status
+   #:webhook-delivery-attempt
+   #:webhook-delivery-response-code
+   #:webhook-delivery-response-body
+   #:webhook-delivery-error-message
+   #:webhook-delivery-created-at
+   #:webhook-delivery-delivered-at
+   #:create-webhook
+   #:get-webhook
+   #:get-all-webhooks
+   #:update-webhook
+   #:delete-webhook
+   #:enable-webhook
+   #:disable-webhook
+   #:trigger-webhook
+   #:queue-webhook-delivery
+   #:deliver-webhook
+   #:retry-webhook-delivery
+   #:start-webhook-worker
+   #:stop-webhook-worker
+   #:get-webhook-stats
+   #:get-webhook-deliveries
+   #:init-webhook-system
+   #:shutdown-webhook-system
+   #:ensure-webhook-tables-exist
+   ;; Poll
+   #:group-poll
+   #:make-group-poll
+   #:poll-option
+   #:make-poll-option
+   #:poll-vote
+   #:make-poll-vote
+   #:ensure-poll-tables-exist
+   #:create-poll
+   #:get-poll
+   #:get-poll-options
+   #:get-poll-results
+   #:cast-vote
+   #:end-poll
+   #:get-group-polls
+   #:recalculate-vote-count
+   ;; Message pinning
+   #:pin-message
+   #:unpin-message
+   #:get-pinned-messages
+   #:is-message-pinned
+   ;; Markdown
+   #:render-markdown
+   #:markdown-to-html
+   #:render-message-content
+   #:parse-markdown-inline
+   #:parse-markdown-block
+   #:highlight-code
+   #:escape-html
+   #:*markdown-options*
+   #:*max-nesting-level*
+   ;; Translation
+   #:translate-text
+   #:translate-message
+   #:translate-batch
+   #:detect-language
+   #:get-language-name
+   #:record-translation
+   #:get-translation-history
+   #:get-translation-stats
+   #:init-translation
+   #:*supported-languages*
+   #:*translation-options*
+   #:*translation-cache*)
+  (:export
+   ;; Logging
+   #:log-message
+   #:log-debug
+   #:log-info
+   #:log-warn
+   #:log-error))
 
 (in-package :lispim-core)
 

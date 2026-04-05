@@ -124,11 +124,12 @@
 (defun s3-generate-signature (method bucket key content-type date secret-key)
   "生成 S3 兼容签名"
   (declare (type string method bucket key content-type date secret-key))
-  (let* ((string-to-sign (format nil "~a~%~%~%~a~%~a~a~a~a"
-                                  method
-                                  date
-                                  (if (string= bucket "") "" (format nil "/~a" bucket))
-                                  key))
+  (let* ((string-to-sign (format nil "~a~%~%~%~a~%~a~%~a~%~a"
+                                 method
+                                 (if (string= bucket "") "" (format nil "/~a" bucket))
+                                 key
+                                 content-type
+                                 date))
          (hmac (ironclad:make-hmac (babel:string-to-octets secret-key) :sha256)))
     (ironclad:update-hmac hmac (babel:string-to-octets string-to-sign))
     (cl-base64:usb8-array-to-base64-string (ironclad:hmac-digest hmac))))
@@ -145,8 +146,12 @@
   (declare (type cdn-storage cdn)
            (type string file-path))
 
-  (let* ((file (probe-file file-path))
-         (file-size (file-length file))
+  ;; 检查文件是否存在
+  (unless (probe-file file-path)
+    (error 'file-not-found :pathname file-path))
+
+  (let* ((file-size (with-open-file (stream file-path :direction :input)
+                      (file-length stream)))
          (max-size (cdn-config-get :max-file-size)))
 
     ;; 检查文件大小
@@ -358,11 +363,13 @@
   (if (cdn-storage-use-local-p cdn)
       ;; 本地存储
       (let ((local-path (merge-pathnames object-key (cdn-storage-local-path cdn))))
-        (when (probe-file local-path)
-          (list :key object-key
-                :size (file-length local-path)
-                :last-modified (file-write-date local-path)
-                :content-type (guess-content-type object-key))))
+        (if (probe-file local-path)
+            (with-open-file (stream local-path :direction :input)
+              (list :key object-key
+                    :size (file-length stream)
+                    :last-modified (file-write-date local-path)
+                    :content-type (guess-content-type object-key)))
+            nil))
       ;; 远程 CDN 存储 - 简化实现
       (list :key object-key
             :size 0  ; 需要从 CDN 获取

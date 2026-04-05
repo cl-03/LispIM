@@ -67,36 +67,50 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      {/* 背景装饰 */}
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 relative overflow-hidden">
+      {/* 动态背景装饰 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl"></div>
+        {/* 大型光晕 */}
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-blue-500/20 to-purple-600/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-tr from-indigo-500/20 to-pink-600/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
         {/* 浮动装饰元素 */}
-        <div className="absolute top-20 left-20 w-4 h-4 bg-blue-400/20 rounded-full animate-pulse"></div>
-        <div className="absolute bottom-32 right-32 w-6 h-6 bg-blue-500/20 rounded-full animate-pulse delay-1000"></div>
+        <div className="absolute top-20 left-20 w-4 h-4 bg-blue-400/30 rounded-full animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.5)]"></div>
+        <div className="absolute bottom-32 right-32 w-6 h-6 bg-purple-500/30 rounded-full animate-pulse delay-500 shadow-[0_0_20px_rgba(139,92,246,0.5)]"></div>
+        <div className="absolute top-1/3 left-1/4 w-3 h-3 bg-pink-400/30 rounded-full animate-pulse delay-700 shadow-[0_0_15px_rgba(236,72,153,0.5)]"></div>
+        <div className="absolute top-2/3 right-1/4 w-5 h-5 bg-cyan-400/30 rounded-full animate-pulse delay-300 shadow-[0_0_18px_rgba(34,211,238,0.5)]"></div>
+        {/* 网格背景 */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
       </div>
 
-      <div className="w-full max-w-md p-8 bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-700/50 relative z-10">
+      {/* 玻璃态卡片 */}
+      <div className="w-full max-w-md p-8 glass-dark rounded-3xl shadow-2xl border border-white/10 relative z-10 transform transition-all duration-300 hover:shadow-[0_0_40px_rgba(59,130,246,0.2)]">
         {/* Logo 和标题 */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-2xl mb-4 shadow-lg">
-            <span className="text-4xl">💬</span>
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500/30 to-purple-600/30 rounded-2xl mb-4 shadow-[0_0_30px_rgba(59,130,246,0.4)] border border-white/10 backdrop-blur-sm transform hover:scale-105 transition-all duration-300">
+            <span className="text-4xl filter drop-shadow-lg">💬</span>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">LispIM</h1>
-          <p className="text-gray-400 font-light">企业级即时通讯系统</p>
+          <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 mb-2 tracking-tight drop-shadow-lg">LispIM</h1>
+          <p className="text-gray-400 font-light text-sm">企业级即时通讯系统</p>
         </div>
 
         {/* 微信快捷登录 */}
         <button
           onClick={handleWechatLogin}
           disabled={loading}
-          className="w-full py-3 px-4 bg-[#07C160] hover:bg-[#07C160]/90 disabled:bg-gray-600
-                   disabled:cursor-not-allowed text-white font-medium rounded-xl
-                   transition-all duration-200 flex items-center justify-center gap-2 shadow-lg mb-6"
+          className="w-full py-3.5 px-4 bg-[#07C160] hover:bg-[#07C160]/90 disabled:bg-gray-600
+                   disabled:cursor-not-allowed text-white font-semibold rounded-xl
+                   transition-all duration-300 flex items-center justify-center gap-2
+                   shadow-[0_4px_20px_rgba(7,193,96,0.4)] hover:shadow-[0_6px_30px_rgba(7,193,96,0.6)]
+                   hover:scale-[1.02] active:scale-[0.98] mb-6 border border-white/10"
         >
           {loading ? (
-            <span>连接中...</span>
+            <span className="flex items-center gap-2">
+              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              连接中...
+            </span>
           ) : (
             <>
               <span className="text-xl">💚</span>
@@ -125,9 +139,10 @@ const Login: React.FC = () => {
               id="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl
+              className="w-full px-4 py-3.5 bg-gray-900/50 backdrop-blur border border-gray-700/50 rounded-xl
                        text-white placeholder-gray-500 focus:outline-none focus:ring-2
-                       focus:ring-blue-500 focus:border-transparent transition-all"
+                       focus:ring-blue-500/50 focus:border-transparent transition-all duration-300
+                       hover:border-gray-600 hover:bg-gray-900/70"
               placeholder="请输入用户名"
               required
             />
@@ -143,16 +158,17 @@ const Login: React.FC = () => {
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-xl
+                className="w-full px-4 py-3.5 bg-gray-900/50 backdrop-blur border border-gray-700/50 rounded-xl
                          text-white placeholder-gray-500 focus:outline-none focus:ring-2
-                         focus:ring-blue-500 focus:border-transparent transition-all pr-12"
+                         focus:ring-blue-500/50 focus:border-transparent transition-all duration-300
+                         hover:border-gray-600 hover:bg-gray-900/70 pr-12"
                 placeholder="请输入密码"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors p-1"
               >
                 {showPassword ? (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -169,21 +185,25 @@ const Login: React.FC = () => {
           </div>
 
           <div className="flex items-center justify-between text-sm">
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label className="flex items-center gap-2 cursor-pointer group">
               <input
                 type="checkbox"
                 className="w-4 h-4 rounded border-gray-600 bg-gray-900 text-blue-500
-                         focus:ring-blue-500 focus:ring-offset-0"
+                         focus:ring-blue-500 focus:ring-offset-0 transition-colors"
               />
-              <span className="text-gray-400">记住我</span>
+              <span className="text-gray-400 group-hover:text-gray-300 transition-colors">记住我</span>
             </label>
-            <button type="button" className="text-blue-500 hover:text-blue-400 font-medium">
+            <button type="button" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
               忘记密码？
             </button>
           </div>
 
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/50 rounded-xl text-red-400 text-sm animate-pulse">
+            <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm
+                          flex items-center gap-2 shadow-[0_0_20px_rgba(239,68,68,0.2)] animate-pulse">
+              <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
               {error}
             </div>
           )}
@@ -191,11 +211,12 @@ const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600
-                     hover:from-blue-600 hover:to-blue-700
+            className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-500 to-indigo-600
+                     hover:from-blue-600 hover:to-indigo-700
                      disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed
-                     text-white font-semibold rounded-xl transition-all duration-200
-                     shadow-lg hover:shadow-blue-500/30"
+                     text-white font-semibold rounded-xl transition-all duration-300
+                     shadow-[0_4px_20px_rgba(59,130,246,0.4)] hover:shadow-[0_6px_30px_rgba(59,130,246,0.6)]
+                     hover:scale-[1.02] active:scale-[0.98]"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
@@ -216,7 +237,9 @@ const Login: React.FC = () => {
           <span className="text-gray-500">还没有账号？</span>
           <button
             onClick={() => navigate('/register')}
-            className="ml-2 text-blue-500 hover:text-blue-400 font-medium"
+            className="ml-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400
+                     hover:from-blue-300 hover:to-purple-300 font-semibold transition-all
+                     hover:shadow-[0_0_15px_rgba(59,130,246,0.4)]"
           >
             立即注册
           </button>
@@ -226,11 +249,11 @@ const Login: React.FC = () => {
         <div className="mt-4 text-center text-xs text-gray-600">
           <p>登录即代表您同意</p>
           <div className="mt-1 space-x-2">
-            <button className="text-gray-500 hover:text-blue-400 transition-colors">
+            <button className="text-gray-500 hover:text-blue-400 transition-colors hover:underline">
               《用户服务协议》
             </button>
             <span>·</span>
-            <button className="text-gray-500 hover:text-blue-400 transition-colors">
+            <button className="text-gray-500 hover:text-blue-400 transition-colors hover:underline">
               《隐私政策》
             </button>
           </div>

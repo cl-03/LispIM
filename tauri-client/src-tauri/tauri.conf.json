@@ -1,5 +1,5 @@
 {
-  "$schema": "https://schema.tauri.app/config/1",
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devPath": "http://localhost:1420",

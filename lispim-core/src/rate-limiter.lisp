@@ -69,7 +69,7 @@
 
 ;;;; 令牌桶实现
 
-(defun make-token-bucket (capacity refill-rate)
+(defun create-token-bucket (capacity refill-rate)
   "创建令牌桶"
   (make-token-bucket
    :capacity capacity
@@ -109,7 +109,7 @@
 
 ;;;; 漏桶实现
 
-(defun make-leaky-bucket (capacity leak-rate)
+(defun create-leaky-bucket (capacity leak-rate)
   "创建漏桶"
   (make-leaky-bucket
    :capacity capacity
@@ -142,7 +142,7 @@
 
 ;;;; 滑动窗口实现
 
-(defun make-sliding-window (window-size max-requests)
+(defun create-sliding-window (window-size max-requests)
   "创建滑动窗口"
   (make-sliding-window
    :window-size window-size
@@ -193,7 +193,7 @@
   (declare (type rate-limiter limiter)
            (type string key))
   (or (gethash key (rate-limiter-buckets limiter))
-      (let ((bucket (make-token-bucket
+      (let ((bucket (create-token-bucket
                       (or burst (rate-limiter-default-burst limiter))
                       (or rate (rate-limiter-default-rate limiter)))))
         (setf (gethash key (rate-limiter-buckets limiter)) bucket)
@@ -221,7 +221,7 @@
 
 ;;;; 固定窗口限流
 
-(defun make-fixed-window (window-size max-requests)
+(defun create-fixed-window (window-size max-requests)
   "创建固定窗口限流器"
   (list :window-size window-size
         :max-requests max-requests
@@ -343,21 +343,21 @@
           *rate-limiter*
 
           ;; Token bucket
-          make-token-bucket
+          create-token-bucket
           token-bucket-try-acquire
           token-bucket-get-tokens
 
           ;; Leaky bucket
-          make-leaky-bucket
+          create-leaky-bucket
           leaky-bucket-try-acquire
 
           ;; Sliding window
-          make-sliding-window
+          create-sliding-window
           sliding-window-try-acquire
           sliding-window-get-count
 
           ;; Fixed window
-          make-fixed-window
+          create-fixed-window
           fixed-window-try-acquire
 
           ;; Rate limiter

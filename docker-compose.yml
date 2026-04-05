@@ -1,70 +1,188 @@
-# LispIM Development Environment
-# Docker Compose configuration for local development
+# LispIM Docker Compose 配置
+# 用于本地开发和测试的完整环境
 
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # ========================================
+  # PostgreSQL 数据库
+  # ========================================
   postgres:
     image: postgres:15-alpine
     container_name: lispim-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: lispim
       POSTGRES_USER: lispim
-      POSTGRES_PASSWORD: lispim_dev_password
+      POSTGRES_PASSWORD: Clsper03
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+      - ./lispim-core/migrations/001-initial-schema.up.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./lispim-core/migrations/002-friend-system.up.sql:/docker-entrypoint-initdb.d/02-friends.sql
+      - ./lispim-core/migrations/003-mobile-support.up.sql:/docker-entrypoint-initdb.d/03-mobile.sql
+      - ./lispim-core/migrations/004-message-status-tracking.up.sql:/docker-entrypoint-initdb.d/04-status.sql
+      - ./lispim-core/migrations/005-incremental-sync.up.sql:/docker-entrypoint-initdb.d/05-sync.sql
+      - ./lispim-core/migrations/006-message-reply.up.sql:/docker-entrypoint-initdb.d/06-reply.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lispim"]
+      test: ["CMD-SHELL", "pg_isready -U lispim -d lispim"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - lispim-net
 
-  # Redis Cache
+  # ========================================
+  # Redis 缓存
+  # ========================================
   redis:
     image: redis:7-alpine
     container_name: lispim-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - lispim-net
 
-  # SBCL Development Environment
+  # ========================================
+  # MinIO 对象存储（用于文件上传）
+  # ========================================
+  minio:
+    image: minio/minio:latest
+    container_name: lispim-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: lispim
+      MINIO_ROOT_PASSWORD: Clsper03
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    volumes:
+      - miniodata:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - lispim-net
+    depends_on:
+      - postgres
+
+  # ========================================
+  # SBCL LispIM 后端
+  # ========================================
   sbcl:
     build:
       context: ./lispim-core
       dockerfile: Dockerfile
     container_name: lispim-sbcl
+    restart: unless-stopped
     volumes:
       - ./lispim-core:/app/lispim-core
-      - ./openclaw-connector-lispim:/app/openclaw-connector
       - sbcl_home:/root/.sbcl
     ports:
       - "3000:3000"
-      - "9000:9000"
     environment:
-      DATABASE_URL: postgresql://lispim:lispim_dev_password@postgres:5432/lispim
+      DATABASE_URL: postgresql://lispim:Clsper03@postgres:5432/lispim
       REDIS_URL: redis://redis:6379/0
-      LOG_LEVEL: debug
+      LISPIM_HOST: "0.0.0.0"
+      LISPIM_PORT: "3000"
+      LOG_LEVEL: info
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: lispim
+      MINIO_SECRET_KEY: Clsper03
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["sbcl", "--load", "/app/lispim-core/src/server.lisp"]
+    networks:
+      - lispim-net
+    command: >
+      sbcl --non-interactive
+      --load /app/lispim-core/src/server.lisp
+      --eval "(lispim-core:start-server)"
+      --eval "(loop while lispim-core:*server-running* do (sleep 1))"
 
-  # Prometheus Monitoring
+  # ========================================
+  # Web 前端 (开发模式)
+  # ========================================
+  web-frontend:
+    build:
+      context: ./web-client
+      dockerfile: Dockerfile.dev
+    container_name: lispim-web
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000/api/v1
+      VITE_WS_URL: ws://localhost:3000/ws
+    depends_on:
+      - sbcl
+    networks:
+      - lispim-net
+    profiles:
+      - dev
+
+  # ========================================
+  # Adminer 数据库管理工具
+  # ========================================
+  adminer:
+    image: adminer:latest
+    container_name: lispim-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: pepa-linha-dark
+    depends_on:
+      - postgres
+    networks:
+      - lispim-net
+    profiles:
+      - tools
+
+  # ========================================
+  # Redis Commander - Redis 可视化管理
+  # ========================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: lispim-redis-commander
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: local:redis:6379
+      HTTP_USER: admin
+      HTTP_PASSWORD: admin
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - lispim-net
+    profiles:
+      - tools
+
+  # ========================================
+  # Prometheus 监控
+  # ========================================
   prometheus:
     image: prom/prometheus:latest
     container_name: lispim-prometheus
+    restart: unless-stopped
     ports:
       - "9090:9090"
     volumes:
@@ -73,31 +191,53 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
     depends_on:
       - sbcl
+    networks:
+      - lispim-net
+    profiles:
+      - monitoring
 
-  # Grafana Dashboard
+  # ========================================
+  # Grafana 监控仪表盘
+  # ========================================
   grafana:
     image: grafana/grafana:latest
     container_name: lispim-grafana
+    restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
+      GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
-      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
+    networks:
+      - lispim-net
+    profiles:
+      - monitoring
 
 volumes:
-  postgres_data:
-  redis_data:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  miniodata:
+    driver: local
   sbcl_home:
+    driver: local
   prometheus_data:
+    driver: local
   grafana_data:
+    driver: local
 
 networks:
-  default:
+  lispim-net:
+    driver: bridge
     name: lispim-network

@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false
+  },
+  "include": [
+    "src/utils/api-client.ts",
+    "src/utils/parallel.ts",
+    "src/utils/index.ts",
+    "src/hooks/useConcurrentRequest.ts",
+    "src/hooks/index.ts",
+    "src/types/index.ts"
+  ],
+  "exclude": [
+    "src/components/*.tsx",
+    "src/store/appStore.ts"
+  ]
+}

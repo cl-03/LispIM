@@ -40,7 +40,8 @@
                :serapeum
                :flexi-streams
                :str
-               :drakma)
+               :drakma
+               :cl-ppcre)
   :pathname "src/"
   :serial t
   :encoding :utf-8
@@ -53,6 +54,10 @@
                (:file "auth" :depends-on ("package" "utils" "snowflake" "storage" "conditions"))
                (:file "gateway" :depends-on ("package" "utils" "snowflake" "auth" "conditions"))
                (:file "module" :depends-on ("package" "utils" "conditions"))
+               ;; Markdown module (富文本支持) - needed for gateway translation APIs
+               (:file "markdown" :depends-on ("package" "utils" "conditions"))
+               ;; Translation module (消息翻译) - needed for gateway translation APIs
+               (:file "translation" :depends-on ("package" "utils" "markdown" "conditions"))
                (:file "message-status" :depends-on ("package" "utils" "storage" "conditions"))
                (:file "message-encoding" :depends-on ("package" "utils" "conditions"))
                (:file "message-compression" :depends-on ("package" "utils" "message-encoding" "conditions"))
@@ -69,11 +74,46 @@
                (:file "rate-limiter" :depends-on ("package" "utils" "conditions"))
                (:file "fulltext-search" :depends-on ("package" "utils" "storage" "conditions"))
                (:file "message-reply" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "chat" :depends-on ("package" "utils" "auth" "storage" "message-status" "message-encoding" "message-compression" "connection-pool" "multi-level-cache" "offline-queue" "message-queue" "cluster" "conditions"))
+               ;; New modules (optimized features)
+               (:file "middleware" :depends-on ("package" "utils" "rate-limiter" "conditions"))
+               (:file "room" :depends-on ("package" "utils" "gateway" "conditions"))
+               (:file "commands" :depends-on ("package" "utils" "conditions"))
+               (:file "reactions" :depends-on ("package" "utils" "storage" "conditions"))
+               (:file "online-cache" :depends-on ("package" "utils" "room" "conditions"))
+               ;; Location and QR modules (扫一扫，附近的人)
+               (:file "location" :depends-on ("package" "utils" "storage" "conditions"))
+               (:file "qr" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; Moments module (朋友圈)
+               (:file "moment" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; Contacts module (通讯录)
+               (:file "contact" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; File Transfer module (大文件传输)
+               (:file "file-transfer" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; Group module (群聊)
+               (:file "group" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; Favorites module (收藏夹)
+               (:file "favorites" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; Call module (语音/视频通话)
+               (:file "call" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; Poll module (群投票)
+               (:file "poll" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; Notification module (通知推送)
+               (:file "notification" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; Webhook module
+               (:file "webhook" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; Privacy module (隐私增强)
+               (:file "privacy" :depends-on ("package" "utils" "storage" "conditions"))
+               ;; New features (2026-04-04)
+               (:file "voice-messages" :depends-on ("package" "utils" "storage" "conditions"))
+               (:file "user-status" :depends-on ("package" "utils" "storage" "reactions" "conditions"))
+               (:file "chat-folders" :depends-on ("package" "utils" "storage" "conditions"))
+               (:file "group-channels" :depends-on ("package" "utils" "storage" "reactions" "conditions"))
+               ;; Core modules with new dependencies
+               (:file "chat" :depends-on ("package" "utils" "auth" "storage" "message-status" "message-encoding" "message-compression" "connection-pool" "multi-level-cache" "offline-queue" "message-queue" "cluster" "room" "commands" "poll" "notification" "privacy" "markdown" "translation" "voice-messages" "user-status" "chat-folders" "group-channels" "conditions"))
                (:file "e2ee" :depends-on ("package" "utils" "conditions" "double-ratchet"))
                (:file "oc-adapter" :depends-on ("package" "utils" "conditions"))
                (:file "observability" :depends-on ("package" "utils" "conditions" "module"))
-               (:file "server" :depends-on ("package" "module" "chat" "e2ee" "storage" "observability" "auth" "gateway" "conditions"))))
+               (:file "server" :depends-on ("package" "module" "chat" "e2ee" "storage" "observability" "auth" "gateway" "middleware" "room" "commands" "reactions" "online-cache" "voice-messages" "user-status" "chat-folders" "group-channels" "conditions"))))
 
 (asdf:defsystem :lispim-core/test
   :version "0.1.0"
@@ -103,7 +143,10 @@
                (:file "test-message-dedup" :depends-on ("test-package"))
                (:file "test-rate-limiter" :depends-on ("test-package"))
                (:file "test-fulltext-search" :depends-on ("test-package"))
-               (:file "test-message-reply" :depends-on ("test-package")))
+               (:file "test-message-reply" :depends-on ("test-package"))
+               ;; New modules tests
+               (:file "test-new-features" :depends-on ("test-package"))
+               (:file "test-privacy" :depends-on ("test-package")))
   :perform (asdf:test-op (o c)
     (uiop:symbol-call :fiveam :run! '(or :lispim-core/test :all))))
 

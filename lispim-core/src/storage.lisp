@@ -225,7 +225,7 @@
 
 ;;;; User Operations (PostgreSQL)
 
-(defun create-user (id username email password-hash &key (password-salt "") (public-key nil) (phone nil) (display-name nil))
+(defun create-user (id username email password-hash &key (password-salt "") (public-key nil) (phone nil) (display-name nil) (is-anonymous nil))
   "Create a new user"
   (declare (type (or integer bignum) id)
            (type string username password-hash password-salt)
@@ -233,10 +233,10 @@
   (ensure-pg-connected)
   (bordeaux-threads:with-lock-held (*storage-lock*)
     (postmodern:query
-     "INSERT INTO users (id, username, email, password_hash, password_salt, public_key, phone, display_name)
-      VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, NULLIF($7, ''), $8)
+     "INSERT INTO users (id, username, email, password_hash, password_salt, public_key, phone, display_name, is_anonymous)
+      VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, NULLIF($7, ''), $8, $9)
       ON CONFLICT (username) DO NOTHING"
-     id username (or email "") password-hash password-salt (or public-key "") (or phone "") (or display-name username))
+     id username (or email "") password-hash password-salt (or public-key "") (or phone "") (or display-name username) (if is-anonymous t nil))
     (log-info "Created user: ~a (ID: ~a)" username id)
     id))
 
@@ -717,6 +717,26 @@
          *system-admin-user-id* *system-admin-username* "system@lispim.local" hash salt *system-admin-display-name*)
         (log-info "Created system admin user: ~a (ID: ~a)" *system-admin-display-name* *system-admin-user-id*)))))
 
+(defun ensure-default-users-exist ()
+  "Ensure default test users exist (admin, user1, user2)"
+  (ensure-pg-connected)
+  (let ((default-users
+         '((100000001 "admin" "admin@lispim.local" "Admin" "admin123456")
+           (100000002 "user1" "user1@lispim.local" "User One" "user123456")
+           (100000003 "user2" "user2@lispim.local" "User Two" "user123456"))))
+    (dolist (user-data default-users)
+      (destructuring-bind (user-id username email display-name password) user-data
+        (let ((existing-id (postmodern:query "SELECT id FROM users WHERE username = $1" username)))
+          (if existing-id
+              (log-debug "Default user already exists: ~a (ID: ~a)" username (caar existing-id))
+              (multiple-value-bind (hash salt)
+                  (hash-password password)
+                (postmodern:query
+                 "INSERT INTO users (id, username, email, password_hash, password_salt, display_name, status)
+                  VALUES ($1, $2, $3, $4, $5, $6, 'active')"
+                 user-id username email hash salt display-name)
+                (log-info "Created default user: ~a (ID: ~a, password: ~a)" username user-id password))))))))
+
 (defun get-or-create-system-admin-conversation (user-id-int)
   "Get or create conversation between user and system admin"
   (ensure-system-admin-exists)
@@ -1049,6 +1069,23 @@
                         :friend-status (elt row 19)
                         :friend-since (storage-universal-to-unix-ms (elt row 20))))))
 
+(defun delete-friend (user-id friend-id)
+  "Delete friend relationship
+   Returns: (values success? error)"
+  (declare (type string user-id friend-id))
+  (ensure-pg-connected)
+  (handler-case
+      (progn
+        ;; Delete bidirectional friend relationship
+        (postmodern:query
+         "DELETE FROM friends
+          WHERE (user_id = $1 AND friend_id = $2)
+             OR (user_id = $2 AND friend_id = $1)"
+         user-id friend-id)
+        (values t nil))
+    (error (c)
+      (values nil (format nil "Error: ~a" c)))))
+
 (defun add-friend-request (sender-id receiver-id &optional message)
   "Send a friend request
    Returns: (values success? request-id error)"
@@ -1152,14 +1189,14 @@
          (rows (postmodern:query
                 "SELECT id, username, display_name, avatar_url
                  FROM users
-                 WHERE ((username LIKE $1 OR display_name LIKE $1 OR id::text = $2)
+                 WHERE ((username LIKE $1 OR display_name LIKE $1 OR id::text = $1)
                    AND status = 'active')
-                 LIMIT $3"
-                search-pattern query limit)))
+                 LIMIT $2"
+                search-pattern limit)))
     (loop for row in rows
           collect (list :id (write-to-string (elt row 0))
                         :username (elt row 1)
-                        :display-name (elt row 2)
+                        :display-name (or (elt row 2) "")
                         :avatar-url (or (elt row 3) "")))))
 
 ;;;; File Upload Operations
@@ -1480,6 +1517,7 @@
 
           ;; Friend operations
           get-friends
+          delete-friend
           add-friend-request
           accept-friend-request
           reject-friend-request

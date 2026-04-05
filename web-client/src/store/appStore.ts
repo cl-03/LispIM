@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { User, Message, Conversation, AuthState, ConnectionState, ChatState, RegisterData } from '@/types'
+import type { User, Message, Conversation, AuthState, ConnectionState, ChatState, RegisterData, GroupMember, ReactionGroup, MessageReaction } from '@/types'
 import type { RegisterRequest } from '@/utils/api-client'
 import { LispIMWebSocket, getWebSocket } from '@/utils/websocket'
 import { createApiClient, getApiClient, ApiClientError } from '@/utils/api-client'
+import { showMessageNotification, updateBadgeCount, showGroupNotification } from '@/utils/notifications'
 
 interface AppState extends AuthState, ConnectionState, ChatState {
   // Actions
@@ -31,9 +32,10 @@ interface AppState extends AuthState, ConnectionState, ChatState {
   initAPI: (baseURL: string, token?: string) => void
   initWebSocket: (url: string) => Promise<void>
   disconnectWebSocket: () => void
-  sendMessage: (conversationId: number, content: string) => Promise<void>
+  sendMessage: (conversationId: number, content: string, type?: 'text' | 'image' | 'file' | 'voice' | 'video', replyTo?: number) => Promise<void>
   readMessage: (messageId: number) => void
   recallMessage: (messageId: number) => Promise<{ success: boolean; error?: string }>
+  editMessage: (messageId: number, content: string) => Promise<{ success: boolean; error?: string }>
 }
 
 const initialState: ChatState = {
@@ -47,6 +49,7 @@ const initialAuthState: AuthState = {
   isAuthenticated: false,
   user: null,
   token: null,
+  sessionId: null,
   refreshToken: null
 }
 
@@ -475,24 +478,31 @@ export const useAppStore = create<AppState>()(
         set({ ws: null, connected: false })
       },
 
-      sendMessage: async (conversationId: number, content: string) => {
+      sendMessage: async (conversationId: number, content: string, type: 'text' | 'image' | 'file' | 'voice' | 'video' = 'text', replyTo?: number) => {
         const { ws, user } = get()
         if (!ws) {
           throw new Error('WebSocket not connected')
         }
         // 创建临时消息 ID（使用负数避免与真实 ID 冲突）
         const tempId = -Date.now()
+        const now = Date.now() / 1000
         // 立即在本地添加消息（optimistic update）
         const tempMessage: Message = {
           id: tempId,
           sequence: 0,
+          conversation_id: conversationId,
           conversationId,
+          sender_id: user?.id || 'unknown',
           senderId: user?.id || 'unknown',
           content,
-          messageType: 'text',
-          createdAt: Date.now() / 1000,
-          readBy: []
-        }
+          message_type: type,
+          messageType: type,
+          created_at: now,
+          createdAt: now,
+          readBy: [],
+          reply_to: replyTo,
+          recalled: false
+        } as Message
         // 添加到本地消息列表
         get().addMessage(tempMessage)
         try {
@@ -525,10 +535,23 @@ export const useAppStore = create<AppState>()(
           } else {
             return { success: false, error: response.error?.message }
           }
-        } catch (err) {
-          console.error('Recall message error:', err)
-          const error = err as ApiClientError
-          return { success: false, error: error.message }
+        } catch (error) {
+          return { success: false, error: 'Recall message failed' }
+        }
+      },
+
+      editMessage: async (messageId: number, content: string) => {
+        try {
+          const api = getApiClient()
+          const response = await api.editMessage(messageId, content)
+
+          if (response.success) {
+            return { success: true }
+          } else {
+            return { success: false, error: response.error?.message }
+          }
+        } catch (error) {
+          return { success: false, error: 'Edit message failed' }
         }
       }
     }),

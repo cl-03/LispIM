@@ -54,6 +54,22 @@ pub struct AuthRequest {
     pub password: String,
 }
 
+// 后端 API 返回的原始响应格式
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackendAuthResponse {
+    pub success: bool,
+    pub data: Option<BackendAuthData>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackendAuthData {
+    pub userid: String,
+    pub username: String,
+    pub token: String,
+}
+
+// 前端期望的响应格式
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthResponse {
     pub success: bool,
@@ -145,7 +161,7 @@ async fn login(
     info!("Login attempt for user: {}", username);
 
     let client = &state.client;
-    let auth_url = format!("{}/api/auth/login", client.base_url);
+    let auth_url = format!("{}/api/v1/auth/login", client.base_url);
 
     let auth_request = AuthRequest {
         username: username.clone(),
@@ -159,8 +175,18 @@ async fn login(
         .await
     {
         Ok(response) => {
-            match response.json::<AuthResponse>().await {
-                Ok(auth_response) => {
+            // 解析后端返回的原始响应
+            match response.json::<BackendAuthResponse>().await {
+                Ok(backend_response) => {
+                    // 转换为前端期望的格式
+                    let auth_response = AuthResponse {
+                        success: backend_response.success,
+                        user_id: backend_response.data.as_ref().map(|d| d.userid.clone()),
+                        username: backend_response.data.as_ref().map(|d| d.username.clone()),
+                        token: backend_response.data.as_ref().map(|d| d.token.clone()),
+                        error: backend_response.error,
+                    };
+
                     if auth_response.success {
                         if let Some(ref token) = auth_response.token {
                             client.set_token(Some(token.clone())).await;
@@ -173,7 +199,7 @@ async fn login(
                 }
                 Err(e) => {
                     error!("Failed to parse auth response: {}", e);
-                    Err(format!("Failed to parse response: {}", e))
+                    Err(format!("服务器响应异常：{}", e))
                 }
             }
         }
@@ -223,7 +249,7 @@ async fn get_user_info(
     let client = &state.client;
     let token = client.get_token().await.ok_or("Not authenticated")?;
 
-    let url = format!("{}/api/users/{}", client.base_url, user_id);
+    let url = format!("{}/api/v1/users/{}", client.base_url, user_id);
 
     match client.http_client
         .get(&url)
@@ -249,7 +275,7 @@ async fn get_conversations(
     let client = &state.client;
     let token = client.get_token().await.ok_or("Not authenticated")?;
 
-    let url = format!("{}/api/conversations", client.base_url);
+    let url = format!("{}/api/v1/conversations", client.base_url);
 
     match client.http_client
         .get(&url)
@@ -278,7 +304,7 @@ async fn get_history(
     let token = client.get_token().await.ok_or("Not authenticated")?;
 
     let limit = limit.unwrap_or(50);
-    let url = format!("{}/api/conversations/{}/messages?limit={}",
+    let url = format!("{}/api/v1/conversations/{}/messages?limit={}",
                       client.base_url, conversation_id, limit);
 
     match client.http_client
@@ -297,64 +323,13 @@ async fn get_history(
     }
 }
 
-// 发送消息命令
+/// 检查应用更新
 #[tauri::command]
-async fn send_message(
-    conversation_id: i64,
-    content: String,
-    message_type: Option<String>,
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<Message, String> {
-    let client = &state.client;
-    let token = client.get_token().await.ok_or("Not authenticated")?;
-
-    let url = format!("{}/api/messages", client.base_url);
-    let request = SendMessageRequest {
-        conversation_id,
-        content,
-        message_type: message_type.unwrap_or_else(|| "text".to_string()),
-    };
-
-    match client.http_client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .header("Content-Type", "application/json")
-        .json(&request)
-        .send()
-        .await
-    {
-        Ok(response) => {
-            match response.json::<Message>().await {
-                Ok(message) => Ok(message),
-                Err(e) => Err(format!("Failed to parse response: {}", e)),
-            }
-        }
-        Err(e) => Err(format!("Network error: {}", e)),
-    }
-}
-
-// 标记消息已读命令
-#[tauri::command]
-async fn mark_as_read(
-    message_ids: Vec<i64>,
-    state: tauri::State<'_, Arc<AppState>>,
-) -> Result<(), String> {
-    let client = &state.client;
-    let token = client.get_token().await.ok_or("Not authenticated")?;
-
-    let url = format!("{}/api/messages/read", client.base_url);
-
-    match client.http_client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", token))
-        .header("Content-Type", "application/json")
-        .json(&serde_json::json!({ "message_ids": message_ids }))
-        .send()
-        .await
-    {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("Network error: {}", e)),
-    }
+async fn check_for_updates(_app: tauri::AppHandle) -> Result<Option<String>, String> {
+    // 自动更新将通过 Tauri 内置机制处理
+    // 这里仅提供手动检查入口
+    // 注意：实际更新检查由 Tauri updater 插件自动处理
+    Ok(Some("Auto-update is enabled. Updates will be checked on startup.".to_string()))
 }
 
 fn main() {
@@ -403,12 +378,10 @@ fn main() {
             get_user_info,
             get_conversations,
             get_history,
-            send_message,
-            mark_as_read,
+            check_for_updates,
             websocket::ws_connect,
             websocket::ws_disconnect,
-            websocket::ws_send_message,
-            websocket::ws_send_read_receipt,
+            websocket::ws_send,
             websocket::ws_get_state
         ])
         .setup(|app| {

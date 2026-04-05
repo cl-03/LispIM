@@ -8,11 +8,19 @@ RUN apt-get update && apt-get install -y \
     sbcl \
     curl \
     git \
+    postgresql-client \
+    redis-tools \
     gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Roswell (Common Lisp implementation manager)
-RUN curl -L https://raw.githubusercontent.com/roswell/roswell/release/scripts/install.roswell.sh | sh
+# Install Quicklisp (Common Lisp package manager)
+RUN curl -O https://beta.quicklisp.org/quicklisp.lisp && \
+    sbcl --non-interactive \
+         --load quicklisp.lisp \
+         --eval "(quicklisp-quickstart:install)" \
+         --eval "(ql:add-to-init-file)" \
+         --quit && \
+    rm quicklisp.lisp
 
 WORKDIR /app
 
@@ -26,9 +34,9 @@ RUN mkdir -p src && \
 
 # Install Quicklisp dependencies
 RUN sbcl --non-interactive \
-    --eval '(ql:quickload :ql-registered-systems)' \
-    --eval '(setf ql:*quicklisp-home* "/root/quicklisp")' \
-    --load /app/lispim-core.asd || true
+    --load /app/lispim-core.asd \
+    --eval "(ql:quickload :lispim-core)" \
+    --quit
 
 # Development stage
 FROM base AS development
@@ -36,6 +44,8 @@ FROM base AS development
 ENV DATABASE_URL=postgresql://localhost:5432/lispim
 ENV REDIS_URL=redis://localhost:6379/0
 ENV LOG_LEVEL=debug
+ENV LISPIM_HOST=0.0.0.0
+ENV LISPIM_PORT=3000
 
 VOLUME ["/app/lispim-core"]
 VOLUME ["/root/.sbcl"]
@@ -51,16 +61,23 @@ FROM base AS production
 ENV DATABASE_URL=postgresql://postgres:5432/lispim
 ENV REDIS_URL=redis://redis:6379/0
 ENV LOG_LEVEL=info
+ENV LISPIM_HOST=0.0.0.0
+ENV LISPIM_PORT=3000
 
 # Copy source code
 COPY src/ /app/lispim-core/src/
+COPY migrations/ /app/lispim-core/migrations/
 
 # Compile all files
 RUN sbcl --non-interactive \
     --load /app/lispim-core/lispim-core.asd \
-    --eval '(ql:quickload :lispim-core)' \
-    --eval '(compile-file "/app/lispim-core/src/server")'
+    --eval "(ql:quickload :lispim-core)" \
+    --eval "(compile-file \"/app/lispim-core/src/server\")"
 
 EXPOSE 3000 9000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/healthz || exit 1
 
 CMD ["sbcl", "--non-interactive", "--load", "/app/lispim-core/src/server.lisp"]

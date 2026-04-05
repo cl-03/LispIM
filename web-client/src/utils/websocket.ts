@@ -11,7 +11,9 @@ export const WS_MSG_TYPE = {
   ERROR: 'error',
   NOTIFICATION: 'notification',
   PRESENCE: 'presence',
-  TYPING: 'typing'
+  TYPING: 'typing',
+  SYNC_REQUEST: 'sync-request',
+  SYNC_RESPONSE: 'sync-response'
 } as const
 
 // ACK 类型
@@ -25,6 +27,7 @@ export interface WSMessage<T = unknown> {
   timestamp: number
   messageId?: string
   ackRequired?: boolean
+  sequence?: number  // 新增序列号用于验证消息顺序
 }
 
 // ACK 消息接口
@@ -76,12 +79,21 @@ export class LispIMWebSocket {
   public config: WebSocketConfig
   private messageHandlers: Map<string, Set<(data: unknown) => void>> = new Map()
   private pendingMessages: Map<string, PendingMessage> = new Map()
-  private maxReconnectAttempts = 5
+  private maxReconnectAttempts = 10
   private reconnectDelay = 1000
-  private ackTimeout = 5000 // ACK 超时时间 5 秒
+  private ackTimeout = 3000 // ACK 超时时间 3 秒（优化降低延迟）
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private heartbeatTimer: ReturnType<typeof setTimeout> | null = null
-  private heartbeatInterval = 30000 // 30 秒心跳
+  private heartbeatInterval = 15000 // 15 秒心跳（优化提高响应性）
+  private reconnectBackoffMultiplier = 1.5 // 指数退避 multiplier
+
+  // 新增：序列号跟踪
+  private lastSequenceReceived: number = 0
+  private seenMessageIds: Map<string, number> = new Map()  // 消息去重
+  private readonly SEEN_TTL = 5 * 60 * 1000  // 5 分钟
+
+  // 同步状态（预留）
+  // private lastSyncAnchorSeq: number = 0
 
   constructor(config: WebSocketConfig) {
     this.config = config
@@ -95,11 +107,17 @@ export class LispIMWebSocket {
           ? this.config.url.replace('http', 'ws')
           : this.config.url
 
-        this.socket = new WebSocket(wsUrl)
+        // 优化 1: 使用 WebSocket 子协议在握手时认证
+        const protocols: string[] = ['lispim-v1']
+        if (this.config.token) {
+          protocols.push(`Bearer:${this.config.token}`)
+        }
+
+        this.socket = new WebSocket(wsUrl, protocols)
 
         this.socket.onopen = () => {
-          console.log('[WebSocket] Connected')
-          // 连接后发送认证消息
+          console.log('[WebSocket] Connected with protocols:', this.socket?.protocol)
+          // 连接后仍然发送认证消息作为后备
           this.sendAuth()
           // 启动心跳
           this.startHeartbeat()
@@ -124,6 +142,16 @@ export class LispIMWebSocket {
         this.socket.onmessage = (event) => {
           try {
             const message: WSMessage = JSON.parse(event.data)
+            // 优化 2: 验证序列号
+            if (!this.verifySequence(message)) {
+              console.warn('[WebSocket] Out of order message:', message.sequence)
+              return
+            }
+            // 优化 3: 消息去重
+            if (this.isDuplicateMessage(message)) {
+              console.log('[WebSocket] Duplicate message ignored:', message.messageId)
+              return
+            }
             this.handleProtocolMessage(message)
           } catch (e) {
             console.error('[WebSocket] Failed to parse message:', e)
@@ -133,6 +161,54 @@ export class LispIMWebSocket {
         reject(error)
       }
     })
+  }
+
+  /**
+   * 验证序列号连续性
+   */
+  private verifySequence(message: WSMessage): boolean {
+    const seq = message.sequence
+    if (seq === undefined) return true  // 没有序列号则跳过验证
+
+    if (seq <= this.lastSequenceReceived) {
+      console.warn('[WebSocket] Out of order: expected >', this.lastSequenceReceived, 'got', seq)
+      return false
+    }
+    this.lastSequenceReceived = seq
+    return true
+  }
+
+  /**
+   * 检查消息是否重复
+   */
+  private isDuplicateMessage(message: WSMessage): boolean {
+    const msgId = message.messageId
+    if (!msgId) return false
+
+    const now = Date.now()
+    const seenTime = this.seenMessageIds.get(msgId)
+
+    if (seenTime !== undefined) {
+      // 检查是否过期
+      if (now - seenTime > this.SEEN_TTL) {
+        this.seenMessageIds.delete(msgId)
+        return false
+      }
+      return true  // 重复消息
+    }
+
+    // 记录新消息
+    this.seenMessageIds.set(msgId, now)
+
+    // 定期清理过期记录
+    if (this.seenMessageIds.size > 1000) {
+      const cutoff = now - this.SEEN_TTL
+      for (const [id, time] of this.seenMessageIds.entries()) {
+        if (time < cutoff) this.seenMessageIds.delete(id)
+      }
+    }
+
+    return false
   }
 
   /**
@@ -240,21 +316,37 @@ export class LispIMWebSocket {
   }
 
   /**
-   * 启动重连
+   * 启动重连（指数退避）
    */
   private startReconnect(): void {
     this.stopReconnect()
     let attempts = 0
-    this.reconnectTimer = setInterval(() => {
+    let currentDelay = this.reconnectDelay
+
+    const attemptReconnect = () => {
       if (attempts >= this.maxReconnectAttempts) {
         this.stopReconnect()
+        console.error('[WebSocket] Max reconnect attempts reached')
         return
       }
-      console.log('[WebSocket] Reconnecting... attempt', attempts + 1)
-      this.connect().catch(() => {
-        attempts++
-      })
-    }, this.reconnectDelay)
+
+      attempts++
+      console.log('[WebSocket] Reconnecting... attempt', attempts, 'in', currentDelay, 'ms')
+
+      this.reconnectTimer = setTimeout(async () => {
+        try {
+          await this.connect()
+          // 连接成功，重置延迟
+          currentDelay = this.reconnectDelay
+        } catch {
+          // 连接失败，增加延迟（指数退避）
+          currentDelay = Math.min(currentDelay * this.reconnectBackoffMultiplier, 30000)
+          attemptReconnect()
+        }
+      }, currentDelay)
+    }
+
+    attemptReconnect()
   }
 
   private stopReconnect(): void {

@@ -142,11 +142,11 @@
 (defun connect-to-database (host port database user password)
   "连接到数据库"
   (let ((conn (postmodern:connect-toplevel
-               :hostname host
+               :host host
                :port port
-               :database database
                :user user
                :password password
+               :database database
                :pool-size 1)))
     (log-debug "Connected to database ~a@~a:~a" user host port)
     conn))
@@ -206,13 +206,13 @@
 
 ;;;; 查询执行
 
-(defun db-write (query &rest args)
+(defmacro db-write (query &rest args)
   "执行写操作"
-  (apply 'postmodern:query query args))
+  `(postmodern:query ,query ,@args))
 
-(defun db-read (query &rest args)
+(defmacro db-read (query &rest args)
   "执行读操作"
-  (apply 'postmodern:query query args))
+  `(postmodern:query ,query ,@args))
 
 ;;;; 健康检查
 
@@ -245,7 +245,8 @@
 (defun check-single-slave (slave timeout)
   "检查单个从库健康"
   (declare (type slave-connection slave)
-           (type integer timeout))
+           (type integer timeout)
+           (ignore timeout))
   (handler-case
       (progn
         ;; 简单健康检查：执行 SELECT 1
@@ -263,7 +264,8 @@
 (defun recover-slave (replica host port)
   "尝试恢复故障从库"
   (declare (type db-replica replica)
-           (type string host port))
+           (type string host)
+           (type integer port))
   (let ((slave (find-if (lambda (s)
                           (and (string= (slave-connection-host s) host)
                                (= (slave-connection-port s) port)))
@@ -360,12 +362,12 @@
   (declare (type db-replica replica))
   ;; 关闭主库连接
   (when (db-replica-master replica)
-    (postmodern:disconnect-toplevel (db-replica-master replica))
+    (postmodern:disconnect-toplevel)
     (log-info "Master database connection closed"))
   ;; 关闭从库连接
   (dolist (slave (db-replica-slaves replica))
     (when (slave-connection-connection slave)
-      (postmodern:disconnect-toplevel (slave-connection-connection slave))))
+      (postmodern:disconnect-toplevel)))
   (log-info "All slave database connections closed")
   (log-info "DB replica shutdown complete"))
 

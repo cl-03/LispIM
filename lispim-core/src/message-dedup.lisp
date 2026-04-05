@@ -73,7 +73,7 @@
          (digest (ironclad:make-digest :sha256)))
     (ironclad:update-digest digest (babel:string-to-octets data))
     ;; 返回 16 字节指纹
-    (let ((hash (ironclad:digest-sequence digest)))
+    (let ((hash (ironclad:digest-sequence digest (make-array 32 :element-type '(unsigned-byte 8)))))
       (subseq hash 0 16))))
 
 (defun message-fingerprint-to-string (fingerprint)
@@ -156,13 +156,15 @@
   (declare (type message-deduplicator dedup))
   (let* ((now (get-universal-time))
          (ttl (message-deduplicator-window-ttl dedup))
-         (expired-threshold (- now ttl)))
+         (expired-threshold (- now ttl))
+         (removed 0))
     (loop for key being the hash-keys of (message-deduplicator-window dedup)
           using (hash-value timestamp)
           when (< timestamp expired-threshold)
-            do (remhash key (message-deduplicator-window dedup))
-          and count it into removed)
-    (when (and removed (> removed 0))
+            do (progn
+                 (remhash key (message-deduplicator-window dedup))
+                 (incf removed)))
+    (when (> removed 0)
       (log-debug "Cleaned up ~a expired entries from dedup window" removed))
     removed))
 
@@ -202,7 +204,10 @@
   (let* ((key (format nil "~a:~a" key-prefix message-id))
          (ttl (or ttl 3600)))
     (handler-case
-        (let ((result (redis:red-set redis-client key "1" :nx t :ex ttl)))
+        ;; 使用 SETNX + EXPIRE 实现原子操作
+        (let ((result (redis:red-setnx redis-client key "1")))
+          (when (and result (> ttl 0))
+            (redis:red-expire redis-client key ttl))
           (if result
               nil  ; 新消息
               t))  ; 重复消息

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/store/appStore'
+import { login as tauriLogin } from '@/utils/tauri-api'
 import type { User } from '@/types'
 
 const Login: React.FC = () => {
@@ -17,18 +18,25 @@ const Login: React.FC = () => {
     setError('')
 
     try {
-      // TODO: 实际的登录 API 调用
-      // 这里模拟登录成功
-      const mockUser: User = {
-        id: 'user-123',
-        username,
-        displayName: username,
+      const response = await tauriLogin(username, password)
+
+      if (!response.success) {
+        throw new Error(response.error || '登录失败')
+      }
+
+      if (!response.token || !response.user_id || !response.username) {
+        throw new Error('服务器响应异常')
+      }
+
+      // 登录成功
+      const user: User = {
+        id: response.user_id,
+        username: response.username,
+        displayName: response.username,
         status: 'online'
       }
 
-      const mockToken = 'mock-jwt-token-' + Date.now()
-
-      login(mockToken, mockUser)
+      login(response.token!, user)
       navigate('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败')

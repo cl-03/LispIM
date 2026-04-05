@@ -1,4 +1,5 @@
-// WebSocket 模块 for LispIM
+// WebSocket 模块 for LispIM - 简化桥接层
+// Rust 仅作为桥接层，业务逻辑由前端/后端处理
 use log::{info, error};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -8,12 +9,14 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 use url::Url;
 use tauri::Manager;
 
-// WebSocket 消息类型
+// WebSocket 消息类型 - 简化为通用结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WSMessage {
     pub r#type: String,
     pub payload: serde_json::Value,
     pub timestamp: i64,
+    pub messageId: Option<String>,
+    pub sequence: Option<i64>,
 }
 
 // WebSocket 连接状态
@@ -176,38 +179,14 @@ impl WSClient {
         }
     }
 
-    pub async fn send_message(&self, conversation_id: i64, content: String) -> Result<(), String> {
+    /// 通用发送方法 - Rust 层只负责转发，不处理业务逻辑
+    pub async fn send_raw(&self, message_type: String, payload: serde_json::Value) -> Result<(), String> {
         let message = WSMessage {
-            r#type: "message:send".to_string(),
-            payload: serde_json::json!({
-                "conversation_id": conversation_id,
-                "content": content,
-                "message_type": "text"
-            }),
+            r#type: message_type,
+            payload,
             timestamp: chrono::Utc::now().timestamp_millis(),
-        };
-        self.send(message).await
-    }
-
-    pub async fn send_read_receipt(&self, message_id: i64) -> Result<(), String> {
-        let message = WSMessage {
-            r#type: "message:read".to_string(),
-            payload: serde_json::json!({
-                "message_id": message_id,
-                "timestamp": chrono::Utc::now().timestamp_millis(),
-            }),
-            timestamp: chrono::Utc::now().timestamp_millis(),
-        };
-        self.send(message).await
-    }
-
-    pub async fn subscribe_conversation(&self, conversation_id: i64) -> Result<(), String> {
-        let message = WSMessage {
-            r#type: "conversation:subscribe".to_string(),
-            payload: serde_json::json!({
-                "conversation_id": conversation_id,
-            }),
-            timestamp: chrono::Utc::now().timestamp_millis(),
+            messageId: None,
+            sequence: None,
         };
         self.send(message).await
     }
@@ -219,20 +198,25 @@ impl WSClient {
     pub async fn get_state(&self) -> WSState {
         self.state.lock().await.clone()
     }
+}
 
-    pub async fn send_heartbeat(&self) -> Result<(), String> {
-        let message = WSMessage {
-            r#type: "heartbeat".to_string(),
-            payload: serde_json::json!({
-                "timestamp": chrono::Utc::now().timestamp_millis(),
-            }),
-            timestamp: chrono::Utc::now().timestamp_millis(),
-        };
-        self.send(message).await
+// ==================== Tauri Commands - 简化桥接层 ====================
+
+/// 通用 WebSocket 发送命令 - 前端负责业务逻辑
+#[tauri::command]
+pub async fn ws_send(
+    message_type: String,
+    payload: serde_json::Value,
+    window: tauri::Window,
+) -> Result<(), String> {
+    if let Some(client) = window.try_state::<Arc<WSClient>>() {
+        client.send_raw(message_type, payload).await
+    } else {
+        Err("WebSocket client not found".to_string())
     }
 }
 
-// 创建 WebSocket 连接
+/// 创建 WebSocket 连接 - 支持子协议认证
 #[tauri::command]
 pub async fn ws_connect(
     url: String,
@@ -268,31 +252,6 @@ pub async fn ws_disconnect(window: tauri::Window) -> Result<(), String> {
     if let Some(client) = window.try_state::<Arc<WSClient>>() {
         client.disconnect().await;
         Ok(())
-    } else {
-        Err("WebSocket client not found".to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn ws_send_message(
-    conversation_id: i64,
-    content: String,
-    window: tauri::Window,
-) -> Result<(), String> {
-    if let Some(client) = window.try_state::<Arc<WSClient>>() {
-        client.send_message(conversation_id, content).await
-    } else {
-        Err("WebSocket client not found".to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn ws_send_read_receipt(
-    message_id: i64,
-    window: tauri::Window,
-) -> Result<(), String> {
-    if let Some(client) = window.try_state::<Arc<WSClient>>() {
-        client.send_read_receipt(message_id).await
     } else {
         Err("WebSocket client not found".to_string())
     }

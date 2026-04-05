@@ -112,6 +112,65 @@
   ;; 初始化速率限制
   (init-rate-limiting :default-rate 100 :default-burst 200)
 
+  ;; 初始化速率限制
+  (init-rate-limiting :default-rate 100 :default-burst 200)
+
+  ;; 初始化 QR 码服务（扫一扫功能）
+  ;; QR 码生成和验证
+
+  ;; 初始化位置服务（附近的人功能）
+  ;; 使用 Redis Geo 实现基于位置的用户发现
+
+  ;; 初始化 WebSocket 中间件管道（新）
+  (register-default-middleware)
+
+  ;; 初始化房间管理系统（新）
+  ;; 参考 Fiora/Tailchat 的房间设计
+
+  ;; 初始化消息反应系统（新）
+  ;; 参考 Tailchat 的 MessageReaction 设计
+  (init-reactions)
+
+  ;; 初始化在线用户缓存（新）
+  ;; 参考 Fiora 的 GroupOnlineMembersCache 设计
+  (init-online-cache :max-entries 10000 :expire-time 60)
+
+  ;; 初始化系统命令（新）
+  ;; 参考 Fiora 的系统命令设计（-roll, -rps 等）
+  (init-system-commands)
+
+  ;; 初始化默认用户（admin, user1, user2）
+  (ensure-default-users-exist)
+
+  ;; 初始化隐私增强功能（阅后即焚、双向删除、元数据最小化）
+  (init-privacy-features)
+
+  ;; 初始化通知系统（桌面通知、免打扰、FCM 推送）
+  (init-notification-system)
+
+  ;; 初始化投票功能（群投票）
+  (ensure-poll-tables-exist)
+
+  ;; 初始化 Webhook 系统（外部集成）
+  (init-webhook-system)
+
+  ;; 初始化语音消息（大文件传输优化）
+  (init-voice-messages-db)
+
+  ;; 初始化用户状态/动态功能（24 小时过期）
+  (init-user-status-db)
+  ;; 启动过期状态清理任务
+  (start-status-cleanup-task)
+
+  ;; 初始化聊天文件夹（类似 Telegram）
+  (init-chat-folders-db)
+
+  ;; 初始化群组频道（类似 Discord）
+  (init-group-channels-db)
+
+  ;; 初始化翻译模块（消息翻译）
+  (init-translation :provider :openclaw :cache-enabled t)
+
   ;; 初始化可观测性
   (init-observability :log-level (config-log-level config))
 
@@ -204,6 +263,12 @@
 
   ;; 关闭可观测性
   (shutdown-observability)
+
+  ;; 关闭隐私功能
+  (shutdown-privacy-features)
+
+  ;; 关闭通知系统
+  (log-info "Shutting down notification system...")
 
   ;; 清理 E2EE 数据
   (secure-cleanup)

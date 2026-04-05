@@ -69,39 +69,31 @@
   "使用 PBKDF2+SHA256 哈希密码"
   (declare (type string password))
   (log-debug "Hash-password: password length=~A" (length password))
-  (let* ((salt (or salt (ironclad:random-data 16)))
-         (password-bytes (babel:string-to-octets password :encoding :utf-8))
-         (key (ironclad:pbkdf2-hash-password password-bytes
-                                             :salt salt
-                                             :iterations 10000
-                                             :digest :sha256)))
-    ;; Convert hash and salt to hex strings for storage
-    (values (with-output-to-string (s)
-              (loop for b across key do (format s "~2,'0x" b)))
-            ;; Convert salt bytes to hex string (not UTF-8!)
-            (with-output-to-string (s)
-              (loop for b across salt do (format s "~2,'0x" b))))))
+  (let* ((salt (or salt (ironclad:make-random-salt)))
+         (password-bytes (babel:string-to-octets password :encoding :utf-8)))
+    ;; Use ironclad:pbkdf2-hash-password with correct argument order
+    ;; Note: salt, digest, iterations are named parameters, not keywords
+    (multiple-value-bind (key salt-bytes)
+        (ironclad:pbkdf2-hash-password password-bytes
+                                       :salt salt
+                                       :digest 'ironclad:sha256
+                                       :iterations 10000)
+      (declare (ignore salt-bytes))
+      ;; Convert hash and salt to hex strings for storage
+      (values (with-output-to-string (s)
+                (loop for b across key do (format s "~2,'0x" b)))
+              (with-output-to-string (s)
+                (loop for b across salt do (format s "~2,'0x" b)))))))
 
 (defun verify-password (password stored-hash salt)
   "验证密码"
-  (declare (type string password)
-           (type (or string null) stored-hash)
-           (type (or string null) salt))
-  (log-debug "Verify-password: password length=~A" (length password))
-  ;; Return nil if hash or salt is missing
-  (unless (and stored-hash salt)
-    (log-error "Missing hash or salt: hash=~A, salt=~A" stored-hash salt)
-    (return-from verify-password nil))
-  ;; Convert hex string salt to octet vector
   (let ((salt-bytes (make-array (/ (length salt) 2) :element-type '(unsigned-byte 8))))
     (loop for i from 0 below (/ (length salt) 2) do
       (setf (aref salt-bytes i)
             (parse-integer salt :start (* i 2) :end (+ (* i 2) 2) :radix 16)))
-    (log-debug "Salt bytes length: ~A" (length salt-bytes))
     (multiple-value-bind (computed-hash computed-salt)
         (hash-password password :salt salt-bytes)
       (declare (ignore computed-salt))
-      (log-debug "Verify result: ~A" (string-equal computed-hash stored-hash))
       (string-equal computed-hash stored-hash))))
 
 ;;;; 用户认证
@@ -109,6 +101,8 @@
 (defun authenticate (username password &key (ip-address nil))
   "用户认证"
   (declare (type string username password))
+  (log-info "authenticate called: username=~A, password length=~A, ip-address=~A"
+            username (length password) ip-address)
 
   ;; Check IP lock
   (when ip-address
@@ -150,16 +144,16 @@
     ;; Verify password
     (let ((stored-hash (getf user :password-hash))
           (salt (getf user :password-salt)))
-      (log-debug "Verifying password for ~a - hash: ~a, salt: ~a" username stored-hash salt)
-      (log-debug "User data: ~A" user)
+      (log-info "Verifying password for ~a - hash: ~a, salt: ~a" username stored-hash salt)
       (let ((result (verify-password password stored-hash salt)))
-        (log-debug "Verify result: ~a" result)
+        (log-info "Verify result: ~a" result)
         (unless result
           (record-failed-attempt ip-address)
           (return-from authenticate
             (make-auth-result
              :success nil
              :error "Invalid username or password"))))
+      (log-info "Password verified, checking account status")
 
       ;; Check account status
       (let ((status (getf user :status)))
@@ -168,6 +162,7 @@
             (make-auth-result
              :success nil
              :error (format nil "Account is ~a" status)))))
+      (log-info "Account status OK, generating token")
 
       ;; Generate Token
       (let ((user-id-val (getf user :user-id))
@@ -652,6 +647,74 @@
   (declare (ignore wechat-openid))
   (values nil "WeChat login not implemented"))
 
+;;;; Anonymous Registration
+
+(defparameter *anonymous-registration-enabled* t
+  "Enable anonymous registration (no phone/email required)")
+
+(defparameter *anonymous-registration-captcha* nil
+  "Require captcha for anonymous registration (optional anti-abuse)")
+
+(defun register-anonymous-user (&key (display-name nil) (captcha-response nil) invitation-code)
+  "Register anonymous user without phone/email
+   Returns: (values success user-id token error-message)
+
+   Features:
+   - No phone number or email required
+   - Generates random user ID (Snowflake) and username
+   - Optional captcha support for anti-abuse
+   - Optional invitation code for private deployments
+
+   Reference: Session, Threema anonymous registration"
+  (declare (type (or null string) display-name captcha-response invitation-code))
+
+  ;; Check if anonymous registration is enabled
+  (unless *anonymous-registration-enabled*
+    (return-from register-anonymous-user
+      (values nil nil nil "Anonymous registration is disabled")))
+
+  ;; Verify captcha if required (optional anti-abuse measure)
+  (when (and *anonymous-registration-captcha* captcha-response)
+    ;; TODO: Implement captcha verification
+    ;; For now, we just log it
+    (log-debug "Captcha verification requested: ~A" captcha-response))
+
+  ;; Verify invitation code if required (for private deployments)
+  (when invitation-code
+    ;; TODO: Implement invitation code verification
+    (log-debug "Invitation code provided: ~A" invitation-code))
+
+  ;; Generate random user ID and username
+  (let* ((user-id (generate-user-id))
+         ;; Generate random username: anon_XXXXXXXX (8 random hex chars)
+         (random-suffix (with-output-to-string (s)
+                          (dotimes (i 8)
+                            (format s "~X" (random 16)))))
+         (username (format nil "anon_~A" random-suffix))
+         ;; Generate random password (user can set later)
+         (random-password (uuid:make-v4-uuid))
+         (display-name-val (or display-name username)))
+
+    (log-info "Registering anonymous user: ~A (display-name: ~A)" username display-name-val)
+
+    ;; Hash password (even though it's random, we store it for consistency)
+    (multiple-value-bind (hash salt)
+        (hash-password random-password)
+      ;; Create user with minimal metadata
+      (create-user user-id username "" hash
+                   :password-salt salt
+                   :phone ""              ; No phone
+                   :display-name display-name-val
+                   :is-anonymous t)       ; Mark as anonymous user
+
+      ;; Create conversation with system admin
+      (create-system-admin-conversation-for-user user-id)
+
+      ;; Generate session token (convert user-id to string for create-session)
+      (let ((token (create-session (princ-to-string user-id) username)))
+        (log-info "Anonymous user registered: ~A -> ~A" user-id username)
+        (values t user-id token nil)))))
+
 ;;;; Export
 
 (export '(authenticate
@@ -687,6 +750,11 @@
           register-user
           register-by-phone
           register-by-email
+          register-anonymous-user
+
+          ;; Anonymous registration options
+          *anonymous-registration-enabled*
+          *anonymous-registration-captcha*
 
           ;; WeChat
           wechat-oauth-login

@@ -100,8 +100,8 @@ export function verify(data: string, signature: string, key: string): boolean {
 }
 
 // 安全擦除 (尽可能)
-export function secureErase(sensitiveData: string): void {
+export function secureErase(_sensitiveData: string): void {
   // JavaScript 无法完全控制内存，但尽可能覆盖
   // 由于字符串不可变，此操作仅作为最佳努力
-  void sensitiveData // eslint-disable-line @typescript-eslint/no-unused-vars
+  console.debug('Secure erase called for sensitive data')
 }

@@ -32,6 +32,20 @@
   `(log:error (format nil ,(str:concat "[~a] " format-str)
                       (get-universal-time) ,@args)))
 
+(defun log-message (level format-str &rest args)
+  "日志记录函数 - 支持动态日志级别"
+  (declare (type keyword level)
+           (type string format-str))
+  (let ((message (apply #'format nil (str:concat "[~a] " format-str)
+                        (get-universal-time) args)))
+    (case level
+      (:debug (log:debug message))
+      (:info (log:info message))
+      (:warn (log:warn message))
+      (:error (log:error message))
+      (:fatal (log:error message))
+      (otherwise (log:info message)))))
+
 ;;;; 安全宏 - 使用符号宏避免重复求值
 
 (defmacro with-safe-division ((divisor &optional default) &body body)

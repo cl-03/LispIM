@@ -21,7 +21,10 @@
 (format t "~&Loading lispim-core system...~%")
 ;; Force reload of the system
 (asdf:clear-system :lispim-core)
-(asdf:load-system :lispim-core :verbose nil :force nil)
+;; Force recompilation
+(handler-bind ((warning #'muffle-warning))
+  (asdf:load-system :lispim-core :verbose nil :force t))
+(format t "~&lispim-core loaded successfully~%")
 
 ;; 启动服务器
 (in-package :lispim-core)

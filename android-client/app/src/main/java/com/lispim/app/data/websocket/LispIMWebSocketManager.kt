@@ -10,8 +10,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import okhttp3.*
 import okhttp3.internal.ws.WebSocketReal
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkRequest
+import android.content.Context
+import com.lispim.app.LispIMApplication
 
 /**
  * WebSocket message protocol v1
@@ -20,7 +26,8 @@ data class WSMessage(
     @SerializedName("type") val type: String,
     @SerializedName("data") val data: Map<String, Any>? = null,
     @SerializedName("ack") val ack: String? = null,
-    @SerializedName("sequence") val sequence: Long? = null
+    @SerializedName("sequence") val sequence: Long? = null,
+    @SerializedName("messageId") val messageId: String? = null
 )
 
 /**
@@ -33,8 +40,14 @@ class LispIMWebSocketManager @Inject constructor() : WebSocketManager {
         private const val TAG = "LispIMWebSocket"
         private const val WS_URL = "ws://localhost:3000/ws"
         private const val HEARTBEAT_INTERVAL = 30000L // 30 seconds
-        private const val RECONNECT_DELAY = 5000L // 5 seconds
-        private const val MAX_RECONNECT_ATTEMPTS = 5
+        private const val MAX_RECONNECT_ATTEMPTS = 10
+        // 指数退避：1s, 2s, 4s, 8s, 16s, 30s, 30s...
+        private const val RECONNECT_DELAY_BASE = 1000L
+        private const val RECONNECT_DELAY_MAX = 30000L
+
+        // 消息去重缓存
+        private const val MESSAGE_TTL = 5 * 60 * 1000L // 5 分钟
+        private const val MAX_SEEN_MESSAGES = 1000
     }
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -51,6 +64,10 @@ class LispIMWebSocketManager @Inject constructor() : WebSocketManager {
     private val gson = Gson()
     private var authToken: String? = null
     private var reconnectAttempts = 0
+    private var lastSequenceReceived: Long = 0  // 序列号跟踪
+
+    // 消息去重缓存：messageId -> timestamp
+    private val seenMessageIds = ConcurrentHashMap<String, Long>()
 
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -205,11 +222,39 @@ class LispIMWebSocketManager @Inject constructor() : WebSocketManager {
 
         reconnectJob?.cancel()
         reconnectJob = messageScope.launch {
-            delay(RECONNECT_DELAY)
+            // 指数退避：1s, 2s, 4s, 8s, 16s, max 30s
+            val delay = minOf(
+                RECONNECT_DELAY_BASE * (1L shl reconnectAttempts),
+                RECONNECT_DELAY_MAX
+            )
+            Log.i(TAG, "Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1}/$MAX_RECONNECT_ATTEMPTS)")
+            delay(delay)
+
+            // 检查网络状态
+            if (!isNetworkAvailable()) {
+                Log.w(TAG, "No network available, waiting...")
+                return@launch
+            }
+
             reconnectAttempts++
-            Log.i(TAG, "Reconnecting (attempt $reconnectAttempts/$MAX_RECONNECT_ATTEMPTS)")
             _connectionState.value = ConnectionState.Reconnecting
             authToken?.let { connect(it) }
+        }
+    }
+
+    /**
+     * 检查网络是否可用
+     */
+    private fun isNetworkAvailable(): Boolean {
+        return try {
+            val cm = LispIMApplication.instance.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = cm.activeNetwork ?: return false
+            val capabilities = cm.getNetworkCapabilities(network) ?: return false
+            capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking network", e)
+            false
         }
     }
 
@@ -217,6 +262,23 @@ class LispIMWebSocketManager @Inject constructor() : WebSocketManager {
         try {
             val json = gson.fromJson(text, Map::class.java)
             val type = json["type"] as? String ?: return
+
+            // 消息去重检查
+            val messageId = (json["messageId"] as? String) ?: (json["data"] as? Map<*, *>)?.get("id") as? String
+            if (messageId != null) {
+                if (isDuplicateMessage(messageId)) {
+                    Log.d(TAG, "Duplicate message ignored: $messageId")
+                    return
+                }
+                markMessageAsSeen(messageId)
+            }
+
+            // 序列号验证
+            val sequence = (json["sequence"] as? Number)?.toLong()
+            if (sequence != null && !verifySequence(sequence)) {
+                Log.w(TAG, "Out of order message, sequence=$sequence, last=$lastSequenceReceived")
+                return
+            }
 
             val message = when (type) {
                 "new_message" -> {
@@ -272,6 +334,49 @@ class LispIMWebSocketManager @Inject constructor() : WebSocketManager {
 
         } catch (e: Exception) {
             Log.e(TAG, "Error parsing message", e)
+        }
+    }
+
+    /**
+     * 验证序列号连续性
+     */
+    private fun verifySequence(sequence: Long): Boolean {
+        if (sequence <= lastSequenceReceived) {
+            return false
+        }
+        lastSequenceReceived = sequence
+        return true
+    }
+
+    /**
+     * 检查消息是否重复
+     */
+    private fun isDuplicateMessage(messageId: String): Boolean {
+        val now = System.currentTimeMillis()
+        val seenTime = seenMessageIds[messageId]
+
+        if (seenTime != null) {
+            // 检查是否过期
+            if (now - seenTime > MESSAGE_TTL) {
+                seenMessageIds.remove(messageId)
+                return false
+            }
+            return true  // 重复消息
+        }
+        return false
+    }
+
+    /**
+     * 标记消息为已见
+     */
+    private fun markMessageAsSeen(messageId: String) {
+        val now = System.currentTimeMillis()
+        seenMessageIds[messageId] = now
+
+        // 定期清理过期记录
+        if (seenMessageIds.size > MAX_SEEN_MESSAGES) {
+            val cutoff = now - MESSAGE_TTL
+            seenMessageIds.entries.removeAll { it.value < cutoff }
         }
     }
 

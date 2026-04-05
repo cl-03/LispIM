@@ -1,0 +1,27 @@
+{
+  "appId": "com.lispim.desktop",
+  "productName": "LispIM",
+  "extraMetadata": {
+    "name": "lispim-desktop",
+    "version": "0.1.0",
+    "main": "electron/main.js"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "package.json"
+  ],
+  "directories": {
+    "output": "release"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "${productName}-${version}-Portable.${ext}"
+  },
+  "asarUnpack": []
+}
