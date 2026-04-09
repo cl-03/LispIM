@@ -5,6 +5,44 @@
 
 (in-package :lispim-core)
 
+;;;; External variable declarations
+;;;; These variables are defined in other modules but used here
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Declare external special variables
+  (proclaim '(special
+    *acceptor* *gateway-start-time* *heartbeat-monitor-thread*
+    *chunk-size* *max-file-size* *moment-max-photos*
+    *snowflake-last-timestamp* *current-user-id*
+    *log-level* *oc-api-key* *oc-endpoint* *room-roles*
+    ;; Other external variables
+    *options-dispatcher* *ssl-cert* *ssl-key* *use-ssl*)))
+
+;;;; External function declarations
+;;;; These functions are defined in other modules but used here
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; Declare undefined functions to avoid SBCL fatal error
+  (macrolet ((declare-external-functions (&rest names)
+               `(progn ,@(loop for name in names
+                               collect `(declaim (ftype (function (&rest t) t) ,name))))))
+    (declare-external-functions
+     ;; Storage functions
+     get-session create-session invalidate-session
+     get-user get-user-by-id store-message get-message-by-id
+     ;; Snowflake
+     generate-snowflake generate-token
+     ;; Chat functions
+     send-message mark-as-read edit-message delete-message
+     broadcast-message push-to-online-user push-to-online-users
+     ;; Room functions
+     ;; Connection functions
+     close-connection send-message-to-connection receive-from-connection
+     ;; Redis functions
+     ;; Utils
+     log-warning replace-re-all regex-replace-all
+     user-to-plist create-message decode-tlv-list)))
+
 ;;;; Special variable declarations (for dynamic binding)
 
 (declaim (special *current-user-id*))
@@ -12,7 +50,7 @@
 ;;;; Dependencies
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (ql:quickload '(:hunchentoot :bordeaux-threads :uuid :cl-json :flexi-streams :cl-base64 :ironclad :drakma :uiop)))
+  (ql:quickload '(:hunchentoot :bordeaux-threads :uuid :cl-json :flexi-streams :cl-base64 :ironclad :drakma :uiop :postmodern)))
 
 ;;;; Helper Functions
 
@@ -95,6 +133,59 @@
   (getf msg :createdAt))
 
 ;;;; Helper Functions
+
+(defun cors-middleware-hook ()
+  "CORS middleware hook - handles OPTIONS preflight and adds CORS headers to all API responses"
+  (let ((method (hunchentoot:request-method hunchentoot:*request*))
+        (uri (hunchentoot:request-uri hunchentoot:*request*)))
+    ;; Only handle /api/v1/ endpoints
+    (when (cl-ppcre:scan "^/api/v1/" uri)
+      ;; Add CORS headers to all API responses
+      (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
+      (setf (hunchentoot:header-out "Access-Control-Allow-Methods") "GET, POST, PUT, DELETE, OPTIONS")
+      (setf (hunchentoot:header-out "Access-Control-Allow-Headers") "Content-Type, Authorization")
+      (setf (hunchentoot:header-out "Access-Control-Max-Age") "86400")
+
+      ;; Handle OPTIONS preflight requests
+      (when (string= method "OPTIONS")
+        (log-info "CORS middleware: handling OPTIONS preflight for ~A" uri)
+        (setf (hunchentoot:return-code*) 204)
+        (return-from cors-middleware-hook "")))))
+
+(defun api-options-handler ()
+  "Handle OPTIONS preflight requests for CORS"
+  (let ((uri (hunchentoot:request-uri hunchentoot:*request*))
+        (method (hunchentoot:request-method hunchentoot:*request*)))
+    ;; Write debug info to file
+    (with-open-file (stream "D:/Claude/LispIM/lispim-core/options-debug.log"
+                            :direction :output
+                            :if-exists :append
+                            :if-does-not-exist :create)
+      (format stream "OPTIONS handler called: method=~A uri=~A~%" method uri))
+    ;; Only handle OPTIONS requests to /api/v1/ endpoints
+    (when (and (string= method "OPTIONS")
+               (cl-ppcre:scan "^/api/v1/" uri))
+      (with-open-file (stream "D:/Claude/LispIM/lispim-core/options-debug.log"
+                              :direction :output
+                              :if-exists :append
+                              :if-does-not-exist :create)
+        (format stream "OPTIONS handler: handling preflight~%"))
+      ;; Add CORS headers
+      (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
+      (setf (hunchentoot:header-out "Access-Control-Allow-Methods") "GET, POST, PUT, DELETE, OPTIONS")
+      (setf (hunchentoot:header-out "Access-Control-Allow-Headers") "Content-Type, Authorization")
+      (setf (hunchentoot:header-out "Access-Control-Max-Age") "86400")
+      ;; Return 204 No Content
+      (setf (hunchentoot:return-code*) 204)
+      (setf (hunchentoot:content-type*) "text/plain")
+      (return-from api-options-handler ""))
+    ;; For non-OPTIONS requests, return NIL to let other handlers process
+    (with-open-file (stream "D:/Claude/LispIM/lispim-core/options-debug.log"
+                            :direction :output
+                            :if-exists :append
+                            :if-does-not-exist :create)
+      (format stream "OPTIONS handler: passing through for non-OPTIONS~%"))
+    nil))
 
 (defun keywordify (str)
   "Convert string to keyword"
@@ -244,8 +335,7 @@
 
 (defun kebab-to-camel-case (str &optional (capitalize-first nil))
   "Convert kebab-case string to camelCase"
-  (declare (type string str)
-           (optimize (speed 2) (safety 1)))
+  (declare (type string str))
   (let ((parts (split-sequence:split-sequence #\- str))
         (result ""))
     (loop for part in parts
@@ -260,7 +350,10 @@
 (declaim (inline make-api-response make-api-error encode-api-response require-auth))
 
 (defun require-auth ()
-  "验证 Token 并返回user-id，如果无效则设置 401 状态并返回 nil"
+  "验证 Token 并返回 user-id，如果无效则设置 401 状态并返回 nil"
+  ;; Allow OPTIONS requests to pass through without authentication
+  (when (string= (hunchentoot:request-method hunchentoot:*request*) "OPTIONS")
+    (return-from require-auth "options-bypass"))
   (handler-case
       (let ((token (hunchentoot:header-in "Authorization" hunchentoot:*request*)))
         (log-info "Require-auth: token header=~A" token)
@@ -287,44 +380,66 @@
 
 (defun make-api-error (code message &optional data)
   "创建统一 API 错误响应"
-  (declare (type string code message)
-           (optimize (speed 2) (safety 1)))
+  (declare (type string code message))
   (list :success nil
         :error (list :code code
                      :message message
                      :details data)))
 
+(defun send-cors-headers ()
+  "Send CORS headers for the current response"
+  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
+  (setf (hunchentoot:header-out "Access-Control-Allow-Methods") "GET, POST, PUT, DELETE, OPTIONS")
+  (setf (hunchentoot:header-out "Access-Control-Allow-Headers") "Content-Type, Authorization")
+  (setf (hunchentoot:header-out "Access-Control-Max-Age") "86400"))
+
 (defun encode-api-response (response)
-  "编码 API 响应中JSON 字符串"
+  "编码 API 响应中 JSON 字符串"
   (declare (type list response)
            (optimize (speed 2) (safety 1)))
-  ;; Convert plists to alists with camelCase keys for JSON encoding
+  ;; Handle OPTIONS preflight - return 204 early
+  (when (string= (hunchentoot:request-method hunchentoot:*request*) "OPTIONS")
+    (setf (hunchentoot:return-code*) 204)
+    (return-from encode-api-response ""))
+  ;; Send CORS headers
+  (send-cors-headers)
+  ;; Convert plist to hash-table and encode as JSON object
   (let ((converted (convert-response-to-camelcase response)))
+    (log-info "encode-api-response: converted type=~A" (type-of converted))
     (cl-json:encode-json-to-string converted)))
-
 (defun convert-response-to-camelcase (data)
-  "Recursively convert plist response to alist with camelCase keys"
+  "Recursively convert structure to hash-table or list for JSON encoding.
+   Returns a hash-table for objects, list for arrays."
   (cond
     ;; Null - JSON null
     ((null data) nil)
-    ;; Plist - convert to alist with camelCase keys
+    ;; Plist - convert to hash-table for JSON object
     ((and (consp data) (keywordp (car data)))
-     (let ((result nil))
+     (let ((hash (make-hash-table :test 'equal)))
        (loop for (key value) on data by #'cddr do
-         (push (cons (kebab-to-camel-case (string-downcase (symbol-name key)))
-                     (convert-response-to-camelcase value))
-               result))
-       (nreverse result)))
-    ;; List - convert each element
+         (let ((camel-key (kebab-to-camel-case (string-downcase (symbol-name key)))))
+           (setf (gethash camel-key hash)
+                 (if (and (listp value) (not (null value)) (keywordp (car value)))
+                     ;; Nested plist - recursively convert
+                     (convert-response-to-camelcase value)
+                     ;; Otherwise just convert nested structures
+                     (if (listp value)
+                         (mapcar #'(lambda (v) (if (and (listp v) (keywordp (car v)))
+                                                   (convert-response-to-camelcase v)
+                                                   v))
+                                 value)
+                         value)))))
+       hash))
+    ;; Proper list (JSON array) - convert each element
     ((listp data)
      (mapcar #'convert-response-to-camelcase data))
     ;; String "null" - convert to nil (JSON null)
     ((and (stringp data) (string= data "null"))
      nil)
-    ;; Keyword - convert to string (for friend-status etc.)
+    ;; Keyword - convert to string
     ((keywordp data)
      (string-downcase (symbol-name data)))
-    ;; Primitive
+    ;; Primitive - return as-is
     (t data)))
 
 (defmacro with-api-handler ((&key method content-type) &body body)
@@ -358,27 +473,8 @@
 (defvar *current-handler* nil
   "当前处理器函数名")
 
-;;;; Types
-
-(deftype connection-state ()
-  '(member :connecting :authenticated :active :closing :closed))
-
-(deftype connection-id ()
-  '(or uuid:uuid string))
-
-;;;; Connection structure
-
-(defstruct connection
-  "Connection state management"
-  (id (uuid:make-v4-uuid) :type uuid:uuid)
-  (user-id nil :type (or null string))
-  (state :connecting :type connection-state)
-  (last-heartbeat (get-universal-time) :type integer)
-  (connected-at (get-universal-time) :type integer)
-  (metadata (make-hash-table :test 'equal) :type hash-table)
-  (message-count 0 :type integer)
-  (socket nil :type t)
-  (socket-stream nil :type (or null stream)))
+;;;; Types - defined in types.lisp
+;;;;  connection-state, connection-id, connection struct
 
 ;;;; Connection manager
 
@@ -545,8 +641,7 @@
 (defun make-ws-message (type payload &key (message-id nil) (ack-required nil))
   "创建标准 WebSocket 消息"
   (declare (type keyword type)
-           (type list payload)
-           (optimize (speed 2) (safety 1)))
+           (type list payload))
   (let ((msg (list :type type
                    :payload payload
                    :version "1.0"
@@ -559,8 +654,7 @@
 
 (defun encode-ws-message (message)
   "编码 WebSocket 消息为 JSON"
-  (declare (type list message)
-           (optimize (speed 2) (safety 1)))
+  (declare (type list message))
   ;; Recursively convert plists to alists for proper JSON object encoding
   (labels ((convert (obj)
              (cond ((null obj) nil)
@@ -861,7 +955,7 @@
          (*current-user-id* (connection-user-id conn)))
     (when (and conversation-id content)
       ;; 发送消息
-          (handler-case
+      (handler-case
           (let ((msg (send-message conversation-id content
                                    :type type
                                    :attachments attachments
@@ -984,10 +1078,6 @@
 
   ;; Add emojis handler to dispatch table
   (push (hunchentoot:create-regex-dispatcher "^/emojis/(.*)" 'emoji-assets-handler)
-        hunchentoot:*dispatch-table*)
-
-  ;; Add CORS preflight handler for OPTIONS requests to /api/ endpoints
-  (push (hunchentoot:create-regex-dispatcher "^/api/v1/.*" 'api-options-handler)
         hunchentoot:*dispatch-table*)
 
   ;; Add login handler (must be before generic /api/v1/ handler)
@@ -1320,6 +1410,27 @@
   (push (hunchentoot:create-regex-dispatcher "^/api/v1/messages/([0-9]+)/unpin$" 'api-unpin-message-handler)
         hunchentoot:*dispatch-table*)
 
+  ;; Note: CORS middleware hook handles OPTIONS requests via *hook-pre-call*
+
+  ;; Add OPTIONS handler for CORS preflight using a closure (checked first due to push order)
+  ;; This MUST come after all other API handlers so it's pushed before them
+  (let ((options-dispatcher
+         (lambda ()
+           (let ((method (hunchentoot:request-method hunchentoot:*request*))
+                 (uri (hunchentoot:request-uri hunchentoot:*request*)))
+             (when (and (string= method "OPTIONS")
+                        (cl-ppcre:scan "^/api/v1/" uri))
+               ;; Add CORS headers
+               (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
+               (setf (hunchentoot:header-out "Access-Control-Allow-Methods") "GET, POST, PUT, DELETE, OPTIONS")
+               (setf (hunchentoot:header-out "Access-Control-Allow-Headers") "Content-Type, Authorization")
+               (setf (hunchentoot:header-out "Access-Control-Max-Age") "86400")
+               ;; Return 204 No Content
+               (setf (hunchentoot:return-code*) 204)
+               (setf (hunchentoot:content-type*) "text/plain")
+               "")))))
+    (push options-dispatcher hunchentoot:*dispatch-table*))
+
   ;; Thread/Reply API
 
   ;; Start heartbeat monitor
@@ -1615,20 +1726,6 @@
             (log-error "emoji-assets-handler: File not found: ~A" file-path)
             (setf (hunchentoot:return-code*) 404)
             "Not found")))))
-
-;; OPTIONS handler for API preflight requests - handles ONLY OPTIONS requests
-(defun api-options-handler ()
-  "Handle OPTIONS preflight requests for API endpoints"
-  (let ((method (hunchentoot:request-method hunchentoot:*request*)))
-    (when (string= method "OPTIONS")
-      (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
-      (setf (hunchentoot:header-out "Access-Control-Allow-Methods") "GET, POST, PUT, DELETE, OPTIONS")
-      (setf (hunchentoot:header-out "Access-Control-Allow-Headers") "Content-Type, Authorization")
-      (setf (hunchentoot:header-out "Access-Control-Max-Age") "86400")
-      (setf (hunchentoot:return-code*) 204)
-      (return-from api-options-handler ""))
-    ;; For non-OPTIONS requests, do nothing and return nil to continue processing
-    nil))
 
 ;; Manifest and PWA files
 (hunchentoot:define-easy-handler (web-manifest :uri "/manifest.webmanifest") ()
@@ -2759,7 +2856,6 @@
 ;; GET /api/v1/users/search?q={query} - Search users
 (defun api-search-users-handler ()
   "Search users by username or display name"
-  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
   (setf (hunchentoot:content-type*) "application/json")
   (let ((user-id (require-auth)))
     (unless user-id
@@ -4696,7 +4792,6 @@ lispim_uptime ~a~%"
 ;; GET /api/v1/contacts/groups - Get contact groups
 (defun api-get-contact-groups-handler ()
   "Get current user's contact groups"
-  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
   (setf (hunchentoot:content-type*) "application/json")
   (unless (string= (hunchentoot:request-method hunchentoot:*request*) "GET")
     (setf (hunchentoot:return-code*) 405)
@@ -4809,7 +4904,6 @@ lispim_uptime ~a~%"
 ;; GET /api/v1/contacts/tags - Get contact tags
 (defun api-get-contact-tags-handler ()
   "Get current user's contact tags"
-  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
   (setf (hunchentoot:content-type*) "application/json")
   (unless (string= (hunchentoot:request-method hunchentoot:*request*) "GET")
     (setf (hunchentoot:return-code*) 405)
@@ -5037,7 +5131,6 @@ lispim_uptime ~a~%"
 ;; GET/POST /api/v1/contacts/blacklist - Get/manage blacklist
 (defun api-blacklist-handler ()
   "Get blacklist or add/remove user"
-  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
   (setf (hunchentoot:content-type*) "application/json")
   (let ((method (hunchentoot:request-method hunchentoot:*request*))
         (user-id (require-auth)))
@@ -5104,7 +5197,6 @@ lispim_uptime ~a~%"
 ;; GET/POST /api/v1/contacts/stars - Get star contacts or add star
 (defun api-stars-handler ()
   "Get star contacts or add star contact"
-  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
   (setf (hunchentoot:content-type*) "application/json")
   (let ((method (hunchentoot:request-method hunchentoot:*request*))
         (user-id (require-auth)))
@@ -6569,6 +6661,8 @@ lispim_uptime ~a~%"
 ;; GET /api/v1/contacts/friends - Get friend list
 (defun api-friend-list-handler ()
   "Get user's friend list"
+  (when (handle-options-if-needed)
+    (return-from api-friend-list-handler ""))
   (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
   (setf (hunchentoot:content-type*) "application/json")
   (unless (string= (hunchentoot:request-method hunchentoot:*request*) "GET")
@@ -6595,7 +6689,6 @@ lispim_uptime ~a~%"
 ;; GET /api/v1/contacts/friend-requests - Get friend requests
 (defun api-friend-requests-handler ()
   "Get user's friend requests"
-  (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
   (setf (hunchentoot:content-type*) "application/json")
   (unless (string= (hunchentoot:request-method hunchentoot:*request*) "GET")
     (setf (hunchentoot:return-code*) 405)
@@ -6635,14 +6728,33 @@ lispim_uptime ~a~%"
     (handler-case
         (let* ((json-str (get-request-body-string))
                (data (cl-json:decode-json-from-string json-str))
-               (receiver-id (cdr (assoc :receiverId data)))
-               (message (cdr (assoc :message data))))
+               receiver-id
+               message)
+          ;; Debug logging
+          (log-info "Friend request - json-str: ~A, data: ~A, type-of: ~A" json-str data (type-of data))
+          ;; Validate that data is an alist (JSON object)
+          ;; cl-json returns: object -> alist, array -> list, true/false -> T/NIL, null -> NIL, number/string -> atom
+          (when (or (null data)        ; null or empty
+                    (symbolp data)     ; boolean true/false
+                    (numberp data)     ; number
+                    (stringp data)     ; string
+                    (vectorp data))    ; array
+            (log-error "INVALID_JSON: data is not an alist, type: ~A" (type-of data))
+            (setf (hunchentoot:return-code*) 400)
+            (return-from api-send-friend-request-handler
+              (encode-api-response (make-api-error "INVALID_JSON" "Request body must be a JSON object"))))
+          ;; cl-json converts camelCase to kebab-case: receiverId -> :receiver-id
+          (log-info "Before assoc - data type: ~A, data: ~A" (type-of data) data)
+          (setf receiver-id (cdr (assoc :receiver-id data))
+                message (cdr (assoc :message data)))
+          (log-info "After assoc - receiver-id: ~A, message: ~A" receiver-id message)
           (unless receiver-id
             (setf (hunchentoot:return-code*) 400)
             (return-from api-send-friend-request-handler
               (encode-api-response (make-api-error "MISSING_FIELDS" "receiverId is required"))))
           (multiple-value-bind (success request-id error)
               (add-friend-request user-id receiver-id message)
+            (log-info "add-friend-request returned: success=~A, request-id=~A, error=~A" success request-id error)
             (if success
                 (encode-api-response
                  (make-api-response `((:success . t)
@@ -6660,29 +6772,45 @@ lispim_uptime ~a~%"
   "Accept a friend request"
   (setf (hunchentoot:header-out "Access-Control-Allow-Origin") "*")
   (setf (hunchentoot:content-type*) "application/json")
-  (unless (string= (hunchentoot:request-method hunchentoot:*request*) "POST")
-    (setf (hunchentoot:return-code*) 405)
-    (return-from api-accept-friend-request-handler
-      (encode-api-response (make-api-error "METHOD_NOT_ALLOWED" "Method not allowed"))))
-  (let ((user-id (require-auth)))
-    (unless user-id
-      (setf (hunchentoot:return-code*) 401)
+  (let* ((uri (hunchentoot:request-uri hunchentoot:*request*))
+         (method (hunchentoot:request-method hunchentoot:*request*)))
+    (log-info "Accept handler: method=~A, uri=~A" method uri)
+    (unless (string= method "POST")
+      (setf (hunchentoot:return-code*) 405)
       (return-from api-accept-friend-request-handler
-        (encode-api-response (make-api-error "AUTH_REQUIRED" "Authentication required"))))
-    (handler-case
-        (let ((request-id (parse-integer (hunchentoot:path-parameter 1) :junk-allowed t)))
-          (multiple-value-bind (success error)
-              (accept-friend-request request-id)
-            (if success
-                (encode-api-response
-                 (make-api-response `((:success . t))))
-                (progn
-                  (setf (hunchentoot:return-code*) 400)
-                  (encode-api-response (make-api-error "ACCEPT_FAILED" error))))))
-      (error (c)
-        (log-error "Accept friend request error: ~A" c)
-        (setf (hunchentoot:return-code*) 500)
-        (encode-api-response (make-api-error "INTERNAL_ERROR" (format nil "~A" c)))))))
+        (encode-api-response (make-api-error "METHOD_NOT_ALLOWED" "Method not allowed"))))
+    (let ((user-id (require-auth)))
+      (unless user-id
+        (setf (hunchentoot:return-code*) 401)
+        (return-from api-accept-friend-request-handler
+          (encode-api-response (make-api-error "AUTH_REQUIRED" "Authentication required"))))
+      (handler-case
+          (let* ((request-id-str (multiple-value-bind (match-start match-end reg-start reg-end)
+                                     (cl-ppcre:scan "^/api/v1/contacts/friend-request/([^/]+)/accept$" uri)
+                                   (if match-start
+                                       (subseq uri (aref reg-start 0) (aref reg-end 0))
+                                       (return-from api-accept-friend-request-handler
+                                         (progn
+                                           (setf (hunchentoot:return-code*) 400)
+                                           (encode-api-response (make-api-error "INVALID_URI" "Invalid URI")))))))
+                 (request-id (parse-integer request-id-str :junk-allowed t)))
+            (log-info "Accept request: request-id-str=~A, request-id=~A (type: ~A)" request-id-str request-id (type-of request-id))
+            (unless (and request-id (integerp request-id))
+              (setf (hunchentoot:return-code*) 400)
+              (return-from api-accept-friend-request-handler
+                (encode-api-response (make-api-error "INVALID_ID" "Invalid request ID"))))
+            (multiple-value-bind (success error)
+                (accept-friend-request request-id)
+              (if success
+                  (encode-api-response
+                   (make-api-response `((:success . t))))
+                  (progn
+                    (setf (hunchentoot:return-code*) 400)
+                    (encode-api-response (make-api-error "ACCEPT_FAILED" error))))))
+        (error (c)
+          (log-error "Accept friend request error: ~A" c)
+          (setf (hunchentoot:return-code*) 500)
+          (encode-api-response (make-api-error "INTERNAL_ERROR" (format nil "~A" c))))))))
 
 ;; POST /api/v1/contacts/friend-request/:id/reject - Reject friend request
 (defun api-reject-friend-request-handler ()
@@ -7955,7 +8083,7 @@ lispim_uptime ~a~%"
           (let ((suggested (subseq (get-suggested-reactions) 0 (min limit 20))))
             (encode-api-response
              (make-api-response
-              (mapcar (lambda (emoji) `(:emoji ,emoji :count 1)) suggested)))))
+              (mapcar (lambda (emoji) `(:emoji ,emoji :count 1)) suggested))))))
       (error (c)
         (log-error "Get frequent reactions error: ~A" c)
         (setf (hunchentoot:return-code*) 500)
@@ -8002,4 +8130,4 @@ lispim_uptime ~a~%"
       (error (c)
         (log-error "Add custom emoji error: ~A" c)
         (setf (hunchentoot:return-code*) 500)
-        (encode-api-response (make-api-error "INTERNAL_ERROR" (format nil "~A" c)))))))))
+        (encode-api-response (make-api-error "INTERNAL_ERROR" (format nil "~A" c))))))))

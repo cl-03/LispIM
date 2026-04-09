@@ -442,6 +442,11 @@
   `(flexi-streams:with-output-to-sequence (,stream-var)
      ,@body))
 
+(defmacro with-input-from-byte-vector ((stream-var byte-vector) &body body)
+  "从字节向量读取"
+  `(flexi-streams:with-input-from-sequence (,stream-var ,byte-vector)
+     ,@body))
+
 ;;;; 安全缓冲区
 
 (defstruct secure-buffer

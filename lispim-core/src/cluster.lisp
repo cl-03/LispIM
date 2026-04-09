@@ -194,12 +194,12 @@
           (:direct
            (let ((target-user (cdr (assoc :target-user message-json))))
              (when (user-local-p target-user)
-               (handle-cluster-direct message-json)))
+               (handle-cluster-direct message-json))))
           (:heartbeat
            (let ((instance (cdr (assoc :instance message-json))))
              (update-instance-heartbeat instance)))
           (t
-           (log-debug "Unknown cluster message type: ~a" type))))))))
+           (log-debug "Unknown cluster message type: ~a" type)))))))
 
 ;;;; User Routing
 

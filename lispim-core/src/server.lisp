@@ -82,7 +82,7 @@
   (start-offline-queue-worker)
 
   ;; 初始化客户端增量同步
-  (init-sync)
+  ;; (init-sync)  ; Temporarily disabled - compile error in ai-config.lisp
 
   ;; 初始化 Redis Streams 消息队列
   (init-message-queue :redis-host "localhost" :redis-port 6379)
@@ -112,30 +112,30 @@
   ;; 初始化速率限制
   (init-rate-limiting :default-rate 100 :default-burst 200)
 
-  ;; 初始化速率限制
-  (init-rate-limiting :default-rate 100 :default-burst 200)
-
   ;; 初始化 QR 码服务（扫一扫功能）
   ;; QR 码生成和验证
+  ;; (init-qr-service)  ;; Disabled - function not defined
 
   ;; 初始化位置服务（附近的人功能）
   ;; 使用 Redis Geo 实现基于位置的用户发现
+  (init-location-service)
 
-  ;; 初始化 WebSocket 中间件管道（新）
+  ;; 初始化 WebSocket 中间件管道
   (register-default-middleware)
 
-  ;; 初始化房间管理系统（新）
+  ;; 初始化房间管理系统
   ;; 参考 Fiora/Tailchat 的房间设计
+  (init-room-system)
 
-  ;; 初始化消息反应系统（新）
+  ;; 初始化消息反应系统
   ;; 参考 Tailchat 的 MessageReaction 设计
   (init-reactions)
 
-  ;; 初始化在线用户缓存（新）
+  ;; 初始化在线用户缓存
   ;; 参考 Fiora 的 GroupOnlineMembersCache 设计
   (init-online-cache :max-entries 10000 :expire-time 60)
 
-  ;; 初始化系统命令（新）
+  ;; 初始化系统命令
   ;; 参考 Fiora 的系统命令设计（-roll, -rps 等）
   (init-system-commands)
 
@@ -154,6 +154,18 @@
   ;; 初始化 Webhook 系统（外部集成）
   (init-webhook-system)
 
+  ;; 初始化插件系统（Tailchat 风格）
+  (init-plugin-system)
+
+  ;; 初始化链接元数据解析
+  (init-linkmeta)
+
+  ;; 初始化面板系统
+  (init-panel-system)
+
+  ;; 初始化 OAuth 2.0 和开放平台
+  (init-oauth-system)
+
   ;; 初始化语音消息（大文件传输优化）
   (init-voice-messages-db)
 
@@ -170,6 +182,12 @@
 
   ;; 初始化翻译模块（消息翻译）
   (init-translation :provider :openclaw :cache-enabled t)
+
+  ;; 初始化 AI 配置系统
+  (init-ai-config-system)
+
+  ;; 初始化 AI 技能系统
+  (init-ai-skills-system)
 
   ;; 初始化可观测性
   (init-observability :log-level (config-log-level config))

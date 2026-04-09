@@ -509,10 +509,36 @@
    #:decode-message-tlv
    #:encode-tlv-string
    #:encode-tlv-uint64
+   #:encode-tlv-bool
    #:encode-tlv-list
    #:decode-tlv-list
    #:encode-message-with-compression
    #:calculate-compression-ratio
+   #:compress-message-if-large
+   ;; TLV field
+   #:tlv-field
+   #:make-tlv-field
+   #:tlv-field-type
+   #:tlv-field-length
+   #:tlv-field-value
+   ;; TLV constants
+   #:+tlv-type-end+
+   #:+tlv-type-string+
+   #:+tlv-type-int64+
+   #:+tlv-type-uint64+
+   #:+tlv-type-bytes+
+   #:+tlv-type-float64+
+   #:+tlv-type-bool+
+   #:+tlv-type-list+
+   ;; Byte utilities
+   #:write-u16-be
+   #:read-u16-be
+   #:write-u64-be
+   #:read-u64-be
+   #:with-output-to-byte-vector
+   #:with-input-from-byte-vector
+   #:write-u32-be
+   #:read-u32-be
    ;; Message Compression
    #:compress-salza2
    #:decompress-salza2
@@ -1003,6 +1029,199 @@
    #:init-webhook-system
    #:shutdown-webhook-system
    #:ensure-webhook-tables-exist
+   ;; Plugin System (Tailchat-style)
+   #:init-plugin-system
+   #:install-plugin-from-url
+   #:install-plugin-from-manifest
+   #:uninstall-plugin
+   #:enable-plugin
+   #:disable-plugin
+   #:list-plugins
+   #:get-plugin
+   #:load-plugin-plugin
+   #:unload-plugin-plugin
+   #:register-plugin-api
+   #:unregister-plugin-api
+   #:call-plugin-api
+   #:handle-plugin-message
+   #:*lispim-plugins*
+   #:*plugin-api-registry*
+   #:plugin-manifest
+   #:make-plugin-manifest
+   #:plugin-manifest-name
+   #:plugin-manifest-label
+   #:plugin-manifest-label-zh
+   #:plugin-manifest-version
+   #:plugin-manifest-author
+   #:plugin-manifest-description
+   #:plugin-manifest-description-zh
+   #:plugin-manifest-server-entry
+   #:plugin-manifest-client-entry
+   #:plugin-manifest-document-url
+   #:plugin-manifest-require-restart
+   #:plugin-manifest-apis
+   #:plugin-manifest-permissions
+   #:plugin-instance
+   #:make-plugin-instance
+   #:plugin-instance-manifest
+   #:plugin-instance-enabled
+   #:plugin-instance-installed-at
+   #:plugin-instance-updated-at
+   #:plugin-instance-load-path
+   #:plugin-instance-package
+   #:plugin-instance-state
+   #:parse-plugin-manifest
+   #:plugin-manifest-to-json
+   ;; Link Metadata (Phase 2)
+   #:link-meta
+   #:make-link-meta
+   #:link-meta-url
+   #:link-meta-title
+   #:link-meta-description
+   #:link-meta-image
+   #:link-meta-site-name
+   #:link-meta-type
+   #:link-meta-embed-url
+   #:link-meta-fetched-at
+   #:*link-meta-cache-ttl*
+   #:get-link-meta
+   #:fetch-link-preview
+   #:extract-urls-from-message
+   #:parse-message-content
+   #:register-special-handler
+   #:init-special-handlers
+   #:bilibili-handler
+   #:youtube-handler
+   #:get-cached-meta
+   #:cache-meta
+   #:redis-get-meta
+   #:redis-set-meta
+   #:linkmeta-fetch
+   #:linkmeta-cache
+   #:linkmeta-parse-message
+   #:register-linkmeta-apis
+   #:init-linkmeta
+   ;; Panel System (Phase 3)
+   #:*panel-types*
+   #:+panel-type-chat+
+   #:+panel-type-web+
+   #:+panel-type-app+
+   #:+panel-type-file+
+   #:+panel-type-announcement+
+   #:+panel-type-calendar+
+   #:+panel-type-vote+
+   #:panel-config
+   #:make-panel-config
+   #:panel-config-type
+   #:panel-config-title
+   #:panel-config-url
+   #:panel-config-app-id
+   #:panel-config-folder-id
+   #:panel-config-permissions
+   #:panel-config-hidden
+   #:panel
+   #:make-panel
+   #:panel-id
+   #:panel-name
+   #:panel-group-id
+   #:panel-type
+   #:panel-config
+   #:panel-position
+   #:panel-created-at
+   #:panel-updated-at
+   #:panel-created-by
+   #:create-panel
+   #:get-panel
+   #:get-group-panels
+   #:update-panel
+   #:delete-panel
+   #:get-next-panel-position
+   #:reorder-group-panels
+   #:row-to-panel
+   #:panel-to-plist
+   #:panel-config-to-plist
+   #:handle-panel-message
+   #:ensure-panel-tables-exist
+   #:init-panel-system
+   #:panel-error
+   #:panel-not-found
+   ;; OAuth 2.0 and Open Platform (Phase 5)
+   #:+oauth-scope-user-read+
+   #:+oauth-scope-user-email+
+   #:+oauth-scope-friends-read+
+   #:+oauth-scope-groups-read+
+   #:+oauth-scope-messages-read+
+   #:+oauth-scope-messages-write+
+   #:+oauth-scope-webhook+
+   #:+oauth-scope-admin+
+   #:oauth-app
+   #:make-oauth-app
+   #:oauth-app-id
+   #:oauth-app-name
+   #:oauth-app-description
+   #:oauth-app-client-id
+   #:oauth-app-client-secret
+   #:oauth-app-redirect-uris
+   #:oauth-app-scopes
+   #:oauth-app-owner-id
+   #:oauth-app-created-at
+   #:oauth-app-active
+   #:oauth-code
+   #:make-oauth-code
+   #:oauth-code-code
+   #:oauth-code-client-id
+   #:oauth-code-user-id
+   #:oauth-code-redirect-uri
+   #:oauth-code-scopes
+   #:oauth-code-expires-at
+   #:oauth-code-used
+   #:oauth-token
+   #:make-oauth-token
+   #:oauth-token-access-token
+   #:oauth-token-refresh-token
+   #:oauth-token-client-id
+   #:oauth-token-user-id
+   #:oauth-token-scopes
+   #:oauth-token-created-at
+   #:oauth-token-expires-at
+   #:oauth-token-revoked
+   #:oauth-event-subscription
+   #:make-oauth-event-subscription
+   #:oauth-event-subscription-id
+   #:oauth-event-subscription-app-id
+   #:oauth-event-subscription-events
+   #:oauth-event-subscription-webhook-url
+   #:oauth-event-subscription-secret
+   #:oauth-event-subscription-active
+   #:oauth-event-subscription-created-at
+   #:create-oauth-app
+   #:get-oauth-app
+   #:get-oauth-app-by-id
+   #:list-oauth-apps
+   #:update-oauth-app
+   #:delete-oauth-app
+   #:create-authorization-code
+   #:get-authorization-code
+   #:validate-authorization-code
+   #:create-oauth-token
+   #:get-oauth-token
+   #:validate-oauth-token
+   #:refresh-oauth-token
+   #:revoke-oauth-token
+   #:create-event-subscription
+   #:get-event-subscription
+   #:get-app-subscriptions
+   #:delete-event-subscription
+   #:emit-event
+   #:send-webhook-request
+   #:generate-webhook-signature
+   #:register-websocket-api
+   #:handle-websocket-api-message
+   #:init-oauth-system
+   #:oauth-error
+   #:oauth-app-not-found
+   #:oauth-invalid-grant
+   #:oauth-token-expired
    ;; Poll
    #:group-poll
    #:make-group-poll
@@ -1046,7 +1265,103 @@
    #:init-translation
    #:*supported-languages*
    #:*translation-options*
-   #:*translation-cache*)
+   #:*translation-cache*
+   ;; AI Config
+   #:ai-config
+   #:make-ai-config
+   #:ai-config-enabled
+   #:ai-config-backend
+   #:ai-config-model
+   #:ai-config-personality
+   #:ai-config-context-length
+   #:ai-config-rate-limit
+   #:ai-config-max-tokens
+   #:ai-config-temperature
+   #:ai-config-system-prompt
+   #:ai-config-auto-summarize
+   #:ai-config-language
+   #:ai-config-streaming-p
+   #:ai-config-skills
+   #:ai-config-budget-limit
+   #:ai-config-auto-retry-p
+   #:ai-config-fallback-backend
+   #:ai-config-routing-rules
+   #:ai-backend-config
+   #:make-ai-backend-config
+   #:ai-backend-config-name
+   #:ai-backend-config-endpoint
+   #:ai-backend-config-api-key
+   #:ai-backend-config-models
+   #:ai-backend-config-capabilities
+   #:ai-backend-config-rate-limit
+   #:get-user-ai-config
+   #:set-user-ai-config
+   #:update-ai-config
+   #:enable-user-ai
+   #:disable-user-ai
+   #:register-ai-backend
+   #:get-ai-backend
+   #:list-ai-backends
+   #:*ai-personalities*
+   #:*ai-skills*
+   #:list-ai-skills
+   #:enable-ai-skill
+   #:disable-ai-skill
+   #:init-ai-config-system
+   ;; AI Chat Integration
+   #:send-ai-chat-request
+   #:handle-ai-auto-reply
+   #:init-ai-chat-integration
+   #:+ai-user-id+
+   ;; AI Skills
+   #:ai-skill
+   #:make-ai-skill
+   #:ai-skill-name
+   #:ai-skill-label
+   #:ai-skill-description
+   #:ai-skill-handler
+   #:ai-skill-parameters
+   #:ai-skill-requires-auth
+   #:ai-skill-rate-limit
+   #:ai-skill-enabled
+   #:ai-skill-category
+   #:ai-skill-context
+   #:make-ai-skill-context
+   #:ai-skill-context-user-id
+   #:ai-skill-context-conversation-id
+   #:ai-skill-context-message-id
+   #:ai-skill-context-args
+   #:ai-skill-context-kwargs
+   #:register-ai-skill
+   #:unregister-ai-skill
+   #:get-ai-skill
+   #:list-ai-skills
+   #:execute-ai-skill
+   #:init-ai-skills-system
+   ;; AI Budget
+   #:budget-config
+   #:make-budget-config
+   #:budget-config-daily-limit
+   #:budget-config-weekly-limit
+   #:budget-config-monthly-limit
+   #:budget-config-alert-threshold
+   #:budget-config-enabled
+   #:set-budget-config
+   #:get-budget-config
+   #:get-budget-stats
+   #:get-budget-alerts
+   #:check-budget-alert
+   ;; AI Token Stats
+   #:get-token-cost-stats
+   ;; AI HTTP Handlers
+   #:api-get-ai-config-handler
+   #:api-update-ai-config-handler
+   #:api-get-ai-backends-handler
+   #:api-get-ai-budget-handler
+   #:api-update-ai-budget-handler
+   #:api-get-ai-stats-handler
+   #:api-chat-completions-handler
+   #:init-ai-http-handlers)
   (:export
    ;; Logging
    #:log-message

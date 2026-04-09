@@ -51,3 +51,14 @@ temp/
 
 # Test output
 test-output/
+
+# Temporary scripts (check-*, test-*, fix-*)
+check-*
+test-*
+fix-*
+verify-*
+analyze-*
+count-*
+find-*
+restore-*
+rename-*

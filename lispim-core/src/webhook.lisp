@@ -278,6 +278,45 @@
                  :updated-at (lispim-universal-to-unix (get-val "UPDATED_AT"))
                  :last-triggered-at (lispim-universal-to-unix (get-val "LAST_TRIGGERED_AT")))))))))
 
+(defun get-user-webhooks (user-id)
+  "获取指定用户的所有 Webhook 配置"
+  (declare (type string user-id))
+  (ensure-pg-connected)
+  (let ((result (postmodern:query
+                 "SELECT * FROM webhooks WHERE owner_id = $1 ORDER BY created_at DESC"
+                 user-id
+                 :alists)))
+    (when result
+      (loop for row in result
+            collect
+            (flet ((get-val (name)
+                     (let ((cell (find name row :key #'car :test #'string=)))
+                       (when cell (cdr cell)))))
+              (let* ((events-str (get-val "EVENTS"))
+                     (events (if events-str
+                                 (cl-json:decode-json-from-string events-str)
+                                 '()))
+                     (headers-str (get-val "HEADERS"))
+                     (headers (if headers-str
+                                  (cl-json:decode-json-from-string headers-str)
+                                  '())))
+                (make-webhook
+                 :id (get-val "ID")
+                 :name (get-val "NAME")
+                 :url (get-val "URL")
+                 :secret (get-val "SECRET")
+                 :events events
+                 :enabled (string= (get-val "ENABLED") "t")
+                 :content-type (keywordify (get-val "CONTENT_TYPE"))
+                 :headers headers
+                 :retry-count (parse-integer (get-val "RETRY_COUNT"))
+                 :timeout-seconds (parse-integer (get-val "TIMEOUT_SECONDS"))
+                 :success-count (parse-integer (get-val "SUCCESS_COUNT"))
+                 :failure-count (parse-integer (get-val "FAILURE_COUNT"))
+                 :created-at (lispim-universal-to-unix (get-val "CREATED_AT"))
+                 :updated-at (lispim-universal-to-unix (get-val "UPDATED_AT"))
+                 :last-triggered-at (lispim-universal-to-unix (get-val "LAST_TRIGGERED_AT")))))))))
+
 (defun update-webhook (webhook-id &key name url events secret enabled content-type headers retry-count timeout-seconds)
   "更新 Webhook 配置"
   (declare (type string webhook-id)

@@ -1097,31 +1097,38 @@
    Returns: (values success? request-id error)"
   (declare (type string sender-id receiver-id)
            (type (or string null) message))
+  (log-info "add-friend-request called: sender=~A, receiver=~A, message=~A" sender-id receiver-id message)
   (ensure-pg-connected)
   (handler-case
-      (let ((result (postmodern:query
-                     "INSERT INTO friend_requests (sender_id, receiver_id, message)
-                      VALUES ($1, $2, $3) RETURNING id"
-                     sender-id receiver-id (or message ""))))
-        (if result
-            (values t (caar result) nil)
-            (values nil nil "Failed to create friend request")))
+      (progn
+        (log-info "Executing friend request insert")
+        (let ((result (postmodern:query
+                       "INSERT INTO friend_requests (sender_id, receiver_id, message)
+                        VALUES ($1, $2, $3) RETURNING id"
+                       sender-id receiver-id (or message ""))))
+          (log-info "Query result: ~A" result)
+          (if result
+              (values t (caar result) nil)
+              (values nil nil "Failed to create friend request"))))
     (error (c)
+      (log-error "add-friend-request error: ~A" c)
       (values nil nil (format nil "Error: ~a" c)))))
 
 (defun accept-friend-request (request-id)
   "Accept a friend request
    Returns: (values success? error)"
-  (declare (type integer request-id))
+  (log-info "accept-friend-request called with request-id: ~A (type: ~A)" request-id (type-of request-id))
   (ensure-pg-connected)
   (handler-case
       (progn
+        (log-info "Starting transaction for request-id: ~A" request-id)
         ;; Use transaction to ensure atomicity
         (postmodern:with-transaction ()
           ;; Update friend request status
           (postmodern:query
            "UPDATE friend_requests SET status = 'accepted', responded_at = NOW() WHERE id = $1"
            request-id)
+          (log-info "Updated friend_requests for id: ~A" request-id)
           ;; Create bidirectional friend relationship
           (postmodern:query
            "INSERT INTO friends (user_id, friend_id, status)
@@ -1129,14 +1136,17 @@
             FROM friend_requests WHERE id = $1
             ON CONFLICT (user_id, friend_id) DO NOTHING"
            request-id)
+          (log-info "Inserted first friend relationship for id: ~A" request-id)
           (postmodern:query
            "INSERT INTO friends (user_id, friend_id, status)
             SELECT receiver_id, sender_id, 'accepted'
             FROM friend_requests WHERE id = $1
             ON CONFLICT (user_id, friend_id) DO NOTHING"
-           request-id))
+           request-id)
+          (log-info "Inserted second friend relationship for id: ~A" request-id))
         (values t nil))
     (error (c)
+      (log-error "accept-friend-request error: ~A" c)
       (values nil (format nil "Error: ~a" c)))))
 
 (defun reject-friend-request (request-id)

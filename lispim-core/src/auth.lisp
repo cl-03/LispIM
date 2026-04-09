@@ -71,19 +71,17 @@
   (log-debug "Hash-password: password length=~A" (length password))
   (let* ((salt (or salt (ironclad:make-random-salt)))
          (password-bytes (babel:string-to-octets password :encoding :utf-8)))
-    ;; Use ironclad:pbkdf2-hash-password with correct argument order
-    ;; Note: salt, digest, iterations are named parameters, not keywords
+    ;; pbkdf2-hash-password returns two values: key (hash) and salt-bytes
     (multiple-value-bind (key salt-bytes)
         (ironclad:pbkdf2-hash-password password-bytes
                                        :salt salt
                                        :digest 'ironclad:sha256
                                        :iterations 10000)
-      (declare (ignore salt-bytes))
       ;; Convert hash and salt to hex strings for storage
       (values (with-output-to-string (s)
                 (loop for b across key do (format s "~2,'0x" b)))
               (with-output-to-string (s)
-                (loop for b across salt do (format s "~2,'0x" b)))))))
+                (loop for b across salt-bytes do (format s "~2,'0x" b)))))))
 
 (defun verify-password (password stored-hash salt)
   "验证密码"
@@ -144,9 +142,12 @@
     ;; Verify password
     (let ((stored-hash (getf user :password-hash))
           (salt (getf user :password-salt)))
-      (log-info "Verifying password for ~a - hash: ~a, salt: ~a" username stored-hash salt)
+      (log-info "Verifying password for ~a - hash: ~a (len: ~a), salt: ~a (len: ~a)"
+                username stored-hash (if stored-hash (length stored-hash) 0)
+                salt (if salt (length salt) 0))
+      (log-info "Input password: ~a (len: ~a)" password (length password))
       (let ((result (verify-password password stored-hash salt)))
-        (log-info "Verify result: ~a" result)
+        (log-info "Verify result: ~a (type: ~a)" result (type-of result))
         (unless result
           (record-failed-attempt ip-address)
           (return-from authenticate
@@ -356,7 +357,7 @@
                         ((string= key "userAgent") (push :user-agent result) (push value result))))
                     data)
            (return-from storage-get-session result)))
-          (t
+          (otherwise
            (log-error "Unknown data type from Redis: ~A" (type-of data)))))
     ;; Fallback to PostgreSQL
     (ensure-pg-connected)

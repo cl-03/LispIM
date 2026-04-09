@@ -20,79 +20,8 @@
 (defvar *memory-messages* nil
   "内存消息存储（在 storage.lisp 中定义）")
 
-;;;; 类型定义 - 增强的类型检查
-
-(deftype message-id ()
-  "消息 ID 类型"
-  '(integer 0 *))
-
-(deftype sequence-number ()
-  "序列号类型"
-  '(integer 0 *))
-
-(deftype user-id ()
-  "用户 ID 类型"
-  'string)
-
-(deftype conversation-id ()
-  "会话 ID 类型"
-  '(integer 0 *))
-
-(deftype message-type ()
-  "消息类型"
-  '(member :text :image :voice :video :file :system :notification :link))
-
-(deftype conversation-type ()
-  "会话类型"
-  '(member :direct :group :channel))
-
-(deftype read-receipt ()
-  "已读回执类型 - 用户 ID 和时间的列表"
-  '(list (cons string integer)))
-
-(deftype attachment ()
-  "附件类型 - plist with :type, :url, :size, :name keys"
-  'plist)
-
-;;;; 消息结构 - 增强的文档和类型
-
-(declaim (inline make-message message-id message-sequence
-                 message-conversation-id message-sender-id))
-
-(defstruct message
-  "IM 消息 - 表示一条聊天消息"
-  (id 0 :type message-id)
-  (sequence 0 :type sequence-number)
-  (conversation-id 0 :type conversation-id)
-  (sender-id "" :type user-id)
-  (message-type :text :type message-type)
-  (content nil :type (or null string))
-  (attachments nil :type list)
-  (created-at (get-universal-time) :type integer)
-  (edited-at nil :type (or null integer))
-  (recalled-p nil :type boolean)
-  (read-by nil :type list)
-  (mentions nil :type list)
-  (reply-to nil :type (or null message-id))
-  (metadata (make-hash-table :test 'equal) :type hash-table))
-
-(defstruct conversation
-  "会话 - 表示一对一或群组聊天"
-  (id 0 :type conversation-id)
-  (type :direct :type conversation-type)
-  (participants nil :type list)
-  (name nil :type (or null string))
-  (avatar nil :type (or null string))
-  (creator-id "" :type user-id)
-  (last-message nil :type (or null message))
-  (last-activity (get-universal-time) :type integer)
-  (last-sequence 0 :type sequence-number)
-  (is-pinned nil :type boolean)
-  (is-muted nil :type boolean)
-  (metadata (make-hash-table :test 'equal) :type hash-table)
-  (member-roles (make-hash-table :test 'equal) :type hash-table)
-  (draft nil :type (or null string))
-  (unread-count 0 :type integer))
+;;;; 类型定义已从 types.lisp 加载，此处不再重复定义
+;;;; 消息和会话结构体也已从 types.lisp 加载
 
 ;;;; 会话管理器 - 增强的缓存和锁
 
@@ -1036,8 +965,13 @@
 (defun extract-og-tag (html property)
   "提取 Open Graph 标签内容"
   (declare (type string html) (type string property))
-  (let* ((regex (format nil "<meta[^>]*property=[\"']og:~a[\"'][^>]*content=[\"']([^\"']*)[\"']" property))
-         (regex-alt (format nil "<meta[^>]*content=[\"']([^\"']*)[\"'][^>]*property=[\"']og:~a[\"']" property)))
+  (let* ((quote-pattern "[\"']")
+         (regex (format nil "<meta[^>]*property=~Aog:~A~A[^>]*content=~A([^~A]*)~A"
+                        quote-pattern property quote-pattern
+                        quote-pattern quote-pattern quote-pattern))
+         (regex-alt (format nil "<meta[^>]*content=~A([^~A]*)~A[^>]*property=~Aog:~A~A"
+                            quote-pattern quote-pattern quote-pattern
+                            quote-pattern property quote-pattern)))
     (multiple-value-bind (match-start match-end reg-start reg-end)
         (cl-ppcre:scan regex html)
       (if match-start
@@ -1051,7 +985,10 @@
 (defun extract-meta-tag (html name)
   "提取普通 meta 标签内容"
   (declare (type string html) (type string name))
-  (let ((regex (format nil "<meta[^>]*name=[\"']~a[\"'][^>]*content=[\"']([^\"']*)[\"']" name)))
+  (let ((quote-pattern "[\"']")
+        (regex (format nil "<meta[^>]*name=~A~A~A[^>]*content=~A([^~A]*)~A"
+                       quote-pattern name quote-pattern
+                       quote-pattern quote-pattern quote-pattern)))
     (multiple-value-bind (match-start match-end reg-start reg-end)
         (cl-ppcre:scan regex html)
       (if match-start
@@ -1070,7 +1007,10 @@
 (defun extract-link-tag (html rel)
   "提取<link>标签的 href"
   (declare (type string html) (type string rel))
-  (let ((regex (format nil "<link[^>]*rel=[\"']~a[\"'][^>]*href=[\"']([^\"']*)[\"']" rel)))
+  (let ((quote-pattern "[\"']")
+        (regex (format nil "<link[^>]*rel=~A~A~A[^>]*href=~A([^~A]*)~A"
+                       quote-pattern rel quote-pattern
+                       quote-pattern quote-pattern quote-pattern)))
     (multiple-value-bind (match-start match-end reg-start reg-end)
         (cl-ppcre:scan regex html)
       (if match-start

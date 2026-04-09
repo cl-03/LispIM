@@ -47,73 +47,98 @@
   :encoding :utf-8
   :components ((:file "package")
                (:file "conditions" :depends-on ("package"))
-               (:file "utils" :depends-on ("package" "conditions"))
-               (:file "snowflake" :depends-on ("package" "utils" "conditions"))
-               (:file "db-migration" :depends-on ("package" "utils" "conditions"))
-               (:file "storage" :depends-on ("package" "utils" "db-migration" "conditions"))
-               (:file "auth" :depends-on ("package" "utils" "snowflake" "storage" "conditions"))
-               (:file "gateway" :depends-on ("package" "utils" "snowflake" "auth" "conditions"))
-               (:file "module" :depends-on ("package" "utils" "conditions"))
-               ;; Markdown module (富文本支持) - needed for gateway translation APIs
-               (:file "markdown" :depends-on ("package" "utils" "conditions"))
-               ;; Translation module (消息翻译) - needed for gateway translation APIs
-               (:file "translation" :depends-on ("package" "utils" "markdown" "conditions"))
-               (:file "message-status" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "message-encoding" :depends-on ("package" "utils" "conditions"))
-               (:file "message-compression" :depends-on ("package" "utils" "message-encoding" "conditions"))
-               (:file "connection-pool" :depends-on ("package" "utils" "conditions"))
-               (:file "multi-level-cache" :depends-on ("package" "utils" "conditions"))
-               (:file "offline-queue" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "sync" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "message-queue" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "cluster" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "double-ratchet" :depends-on ("package" "utils" "conditions"))
-               (:file "cdn-storage" :depends-on ("package" "utils" "conditions"))
-               (:file "db-replica" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "message-dedup" :depends-on ("package" "utils" "conditions"))
-               (:file "rate-limiter" :depends-on ("package" "utils" "conditions"))
-               (:file "fulltext-search" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "message-reply" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; New modules (optimized features)
-               (:file "middleware" :depends-on ("package" "utils" "rate-limiter" "conditions"))
-               (:file "room" :depends-on ("package" "utils" "gateway" "conditions"))
-               (:file "commands" :depends-on ("package" "utils" "conditions"))
-               (:file "reactions" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "online-cache" :depends-on ("package" "utils" "room" "conditions"))
-               ;; Location and QR modules (扫一扫，附近的人)
-               (:file "location" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "qr" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; Moments module (朋友圈)
-               (:file "moment" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; Contacts module (通讯录)
-               (:file "contact" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; File Transfer module (大文件传输)
-               (:file "file-transfer" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; Group module (群聊)
-               (:file "group" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; Favorites module (收藏夹)
-               (:file "favorites" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; Call module (语音/视频通话)
-               (:file "call" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; Poll module (群投票)
-               (:file "poll" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; Notification module (通知推送)
-               (:file "notification" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; Webhook module
-               (:file "webhook" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; Privacy module (隐私增强)
-               (:file "privacy" :depends-on ("package" "utils" "storage" "conditions"))
-               ;; New features (2026-04-04)
-               (:file "voice-messages" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "user-status" :depends-on ("package" "utils" "storage" "reactions" "conditions"))
-               (:file "chat-folders" :depends-on ("package" "utils" "storage" "conditions"))
-               (:file "group-channels" :depends-on ("package" "utils" "storage" "reactions" "conditions"))
-               ;; Core modules with new dependencies
-               (:file "chat" :depends-on ("package" "utils" "auth" "storage" "message-status" "message-encoding" "message-compression" "connection-pool" "multi-level-cache" "offline-queue" "message-queue" "cluster" "room" "commands" "poll" "notification" "privacy" "markdown" "translation" "voice-messages" "user-status" "chat-folders" "group-channels" "conditions"))
-               (:file "e2ee" :depends-on ("package" "utils" "conditions" "double-ratchet"))
-               (:file "oc-adapter" :depends-on ("package" "utils" "conditions"))
-               (:file "observability" :depends-on ("package" "utils" "conditions" "module"))
-               (:file "server" :depends-on ("package" "module" "chat" "e2ee" "storage" "observability" "auth" "gateway" "middleware" "room" "commands" "reactions" "online-cache" "voice-messages" "user-status" "chat-folders" "group-channels" "conditions"))))
+               (:file "types" :depends-on ("package" "conditions"))
+               (:file "utils" :depends-on ("package" "conditions" "types"))
+               (:file "snowflake" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "db-migration" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "storage" :depends-on ("package" "utils" "db-migration" "conditions" "types"))
+               (:file "auth" :depends-on ("package" "utils" "snowflake" "storage" "conditions" "types"))
+               ;; Module system
+               (:file "module" :depends-on ("package" "utils" "conditions" "types"))
+               ;; Markdown and Translation
+               (:file "markdown" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "translation" :depends-on ("package" "utils" "markdown" "conditions" "types"))
+               ;; Message handling
+               (:file "message-status" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               (:file "message-encoding" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "message-compression" :depends-on ("package" "utils" "message-encoding" "conditions" "types"))
+               (:file "message-reply" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Infrastructure
+               (:file "connection-pool" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "multi-level-cache" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "offline-queue" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               (:file "sync" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               (:file "message-queue" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               (:file "cluster" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               (:file "double-ratchet" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "cdn-storage" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "db-replica" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               (:file "message-dedup" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "rate-limiter" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "fulltext-search" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; New modules
+               (:file "middleware" :depends-on ("package" "utils" "rate-limiter" "conditions" "types"))
+               (:file "room" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "commands" :depends-on ("package" "utils" "conditions" "types"))
+               (:file "reactions" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               (:file "online-cache" :depends-on ("package" "utils" "room" "conditions" "types"))
+               ;; Location and QR
+               (:file "location" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               (:file "qr" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Moments
+               (:file "moment" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Contacts
+               (:file "contact" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; File Transfer
+               (:file "file-transfer" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Group
+               (:file "group" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Favorites
+               (:file "favorites" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Call
+               (:file "call" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Poll
+               (:file "poll" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Notification
+               (:file "notification" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Webhook
+               (:file "webhook" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Privacy
+               (:file "privacy" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Voice messages
+               (:file "voice-messages" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; User status
+               (:file "user-status" :depends-on ("package" "utils" "storage" "reactions" "conditions" "types"))
+               ;; Chat folders
+               (:file "chat-folders" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Group channels
+               (:file "group-channels" :depends-on ("package" "utils" "storage" "reactions" "conditions" "types"))
+               ;; Plugin system
+               (:file "plugin" :depends-on ("package" "utils" "storage" "conditions" "types"))
+               ;; Link metadata
+               (:file "linkmeta" :depends-on ("package" "utils" "storage" "plugin" "conditions" "types"))
+               ;; Panel system
+               (:file "panel" :depends-on ("package" "utils" "storage" "plugin" "conditions" "types"))
+               ;; OAuth
+               (:file "oauth" :depends-on ("package" "utils" "storage" "auth" "conditions" "types"))
+               ;; Gateway forward declarations - declares functions called in gateway but defined later
+               (:file "gateway-forward-decls" :depends-on ("package" "conditions" "types"))
+               ;; Gateway - after all modules it depends on
+               (:file "gateway" :depends-on ("package" "utils" "snowflake" "auth" "storage" "module" "markdown" "translation" "message-status" "message-encoding" "message-compression" "message-reply" "connection-pool" "multi-level-cache" "offline-queue" "sync" "message-queue" "cluster" "double-ratchet" "cdn-storage" "db-replica" "message-dedup" "rate-limiter" "fulltext-search" "middleware" "room" "commands" "reactions" "online-cache" "location" "qr" "moment" "contact" "file-transfer" "group" "favorites" "call" "poll" "notification" "webhook" "privacy" "voice-messages" "user-status" "chat-folders" "group-channels" "plugin" "linkmeta" "panel" "oauth" "gateway-forward-decls" "conditions" "types"))
+               ;; Chat
+               (:file "chat" :depends-on ("package" "utils" "auth" "storage" "message-status" "message-encoding" "message-compression" "connection-pool" "multi-level-cache" "offline-queue" "message-queue" "cluster" "room" "commands" "poll" "notification" "privacy" "markdown" "translation" "voice-messages" "user-status" "chat-folders" "group-channels" "linkmeta" "panel" "oauth" "gateway" "conditions" "types"))
+               ;; E2EE
+               (:file "e2ee" :depends-on ("package" "utils" "conditions" "double-ratchet" "types"))
+               ;; OC Adapter
+               (:file "oc-adapter" :depends-on ("package" "utils" "conditions" "types"))
+               ;; AI Config
+               (:file "ai-config" :depends-on ("package" "utils" "storage" "oc-adapter" "conditions" "types"))
+               ;; AI Skills
+               (:file "ai-skills" :depends-on ("package" "utils" "storage" "ai-config" "chat" "conditions" "types"))
+               ;; Observability
+               (:file "observability" :depends-on ("package" "utils" "conditions" "module" "types"))
+               ;; Server
+               (:file "server" :depends-on ("package" "module" "chat" "e2ee" "storage" "observability" "auth" "gateway" "middleware" "room" "commands" "reactions" "online-cache" "voice-messages" "user-status" "chat-folders" "group-channels" "ai-config" "ai-skills" "conditions" "types"))))
 
 (asdf:defsystem :lispim-core/test
   :version "0.1.0"
@@ -146,7 +171,9 @@
                (:file "test-message-reply" :depends-on ("test-package"))
                ;; New modules tests
                (:file "test-new-features" :depends-on ("test-package"))
-               (:file "test-privacy" :depends-on ("test-package")))
+               (:file "test-privacy" :depends-on ("test-package"))
+               ;; AI Config tests
+               (:file "test-ai-config" :depends-on ("test-package")))
   :perform (asdf:test-op (o c)
     (uiop:symbol-call :fiveam :run! '(or :lispim-core/test :all))))
 

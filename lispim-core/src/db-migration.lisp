@@ -63,7 +63,7 @@
         (let* ((filename (file-namestring file))
                (match (multiple-value-list (cl-ppcre:scan-to-strings "^([0-9]+)-.*\\.up\\.sql$" filename))))
           (when (and match (> (length match) 0))
-            (let ((version (parse-integer (svref (nth 0 match) 0))))
+            (let ((version (parse-integer (aref (nth 0 match) 0))))
               (push (list :version version
                           :file file
                           :name (pathname-name filename))

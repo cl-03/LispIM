@@ -13,17 +13,17 @@
 
 ;;;; 面板类型定义
 
-(defconstant +panel-types+
+(defparameter +panel-types+
   '(:chat      "聊天面板")
   "内置面板类型")
 
-(defconstant +panel-type-chat+      :chat      "聊天面板")
-(defconstant +panel-type-web+       :web       "网页面板")
-(defconstant +panel-type-app+       :app       "应用面板")
-(defconstant +panel-type-file+      :file      "文件面板")
-(defconstant +panel-type-announcement+ :announcement "公告面板")
-(defconstant +panel-type-calendar+  :calendar  "日历面板")
-(defconstant +panel-type-vote+      :vote      "投票面板")
+(defparameter +panel-type-chat+      :chat      "聊天面板")
+(defparameter +panel-type-web+       :web       "网页面板")
+(defparameter +panel-type-app+       :app       "应用面板")
+(defparameter +panel-type-file+      :file      "文件面板")
+(defparameter +panel-type-announcement+ :announcement "公告面板")
+(defparameter +panel-type-calendar+  :calendar  "日历面板")
+(defparameter +panel-type-vote+      :vote      "投票面板")
 
 ;;;; 面板配置结构
 
