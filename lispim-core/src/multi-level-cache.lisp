@@ -126,16 +126,15 @@
         (oldest-time most-positive-fixnum)
         (lowest-access most-positive-fixnum))
     ;; Find entry with lowest priority (access-count * time)
-    (maphash (lambda (key entry)
-               (declare (ignore key))
-               (let* ((access (cache-entry-access-count entry))
-                      (time (cache-entry-last-accessed entry))
-                      (priority (+ (- most-positive-fixnum time)
-                                   (* access 1000))))
-                 (when (< priority lowest-access)
-                   (setf lowest-access priority
-                         oldest-key (cache-entry-key entry)))))
-             (l1-cache-store cache))
+    (do-hash (key entry (l1-cache-store cache))
+      (declare (ignore key))
+      (let* ((access (cache-entry-access-count entry))
+             (time (cache-entry-last-accessed entry))
+             (priority (+ (- most-positive-fixnum time)
+                          (* access 1000))))
+        (when (< priority lowest-access)
+          (setf lowest-access priority
+                oldest-key (cache-entry-key entry)))))
     ;; Remove oldest entry
     (when oldest-key
       (remhash oldest-key (l1-cache-store cache))

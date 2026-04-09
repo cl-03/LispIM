@@ -103,12 +103,11 @@
   (let ((room (gethash room-id *rooms*)))
     (when room
       ;; 移除所有成员
-      (maphash (lambda (user-id membership)
-                 (declare (ignore membership))
-                 (remove-from-room room-id user-id))
-               (room-members room))
+      (do-hash (user-id membership (room-members room))
+        (declare (ignore membership))
+        (remove-from-room room-id user-id))
       ;; 从全局表移除
-      (bordeaux-threads:with-lock-held (*rooms-lock*)
+      (with-lock-held (*rooms-lock*)
         (remhash room-id *rooms*)
         (decf *rooms-active-gauge*))
       (log-info "Room destroyed: ~a" room-id)
@@ -186,10 +185,9 @@
   (let ((room (gethash room-id *rooms*)))
     (when room
       (let ((members nil))
-        (maphash (lambda (uid membership)
-                   (declare (ignore membership))
-                   (push uid members))
-                 (room-members room))
+        (do-hash (uid membership (room-members room))
+          (declare (ignore membership))
+          (push uid members))
         members))))
 
 (defun get-room-member-count (room-id)
@@ -258,13 +256,12 @@
       (log-warn "Broadcast failed: room ~a not found" room-id)
       (return-from broadcast-to-room nil))
     (let ((count 0))
-      (maphash (lambda (user-id membership)
-                 (declare (ignore membership))
-                 (unless (and exclude-user-id
-                              (string= user-id exclude-user-id))
-                   (broadcast-to-user user-id message)
-                   (incf count)))
-               (room-members room))
+      (do-hash (user-id membership (room-members room))
+        (declare (ignore membership))
+        (unless (and exclude-user-id
+                     (string= user-id exclude-user-id))
+          (broadcast-to-user user-id message)
+          (incf count)))
       (log-debug "Broadcast to room ~a: ~a members" room-id count)
       count)))
 
@@ -286,12 +283,11 @@
     (unless room
       (return-from get-room-online-members nil))
     (let ((online nil))
-      (maphash (lambda (user-id membership)
-                 (declare (ignore membership))
-                 (let ((conns (get-user-connections user-id)))
-                   (when conns
-                     (push user-id online))))
-               (room-members room))
+      (do-hash (user-id membership (room-members room))
+        (declare (ignore membership))
+        (let ((conns (get-user-connections user-id)))
+          (when conns
+            (push user-id online))))
       online)))
 
 (defun get-room-online-count (room-id)
@@ -411,15 +407,14 @@
         (group 0)
         (channel 0)
         (user 0))
-    (maphash (lambda (id room)
-               (declare (ignore id))
-               (case (room-type room)
-                 (:temporary (incf temporary))
-                 (:group (incf group))
-                 (:channel (incf channel))
-                 (:user (incf user))
-                 (:system nil)))
-             *rooms*)
+    (do-hash (id room *rooms*)
+      (declare (ignore id))
+      (case (room-type room)
+        (:temporary (incf temporary))
+        (:group (incf group))
+        (:channel (incf channel))
+        (:user (incf user))
+        (:system nil)))
     (list :total total
           :created *rooms-created-counter*
           :active-gauge *rooms-active-gauge*
@@ -433,12 +428,11 @@
 (defun cleanup-temporary-rooms ()
   "清理临时房间（可定时调用）"
   (let ((to-remove nil))
-    (maphash (lambda (id room)
-               (when (eq (room-type room) :temporary)
-                 ;; 临时房间 1 小时后自动清理
-                 (when (> (- (get-universal-time) (room-created-at room)) 3600)
-                   (push id to-remove))))
-             *rooms*)
+    (do-hash (id room *rooms*)
+      (when (eq (room-type room) :temporary)
+        ;; 临时房间 1 小时后自动清理
+        (when (> (- (get-universal-time) (room-created-at room)) 3600)
+          (push id to-remove))))
     (dolist (id to-remove)
       (destroy-room id))
     (when to-remove

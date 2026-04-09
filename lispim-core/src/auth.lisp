@@ -346,19 +346,18 @@
               (return-from storage-get-session data))))
           (hash-table
            ;; Convert hash-table to plist
-           (setq result nil)
-           (maphash (lambda (key value)
-                      (cond
-                        ((string= key "sessionId") (push :session-id result) (push value result))
-                        ((string= key "userId") (push :user-id result) (push value result))
-                        ((string= key "username") (push :username result) (push value result))
-                        ((string= key "expiresAt") (push :expires-at result) (push value result))
-                        ((string= key "ipAddress") (push :ip-address result) (push value result))
-                        ((string= key "userAgent") (push :user-agent result) (push value result))))
-                    data)
-           (return-from storage-get-session result)))
+           (let ((result nil))
+             (do-hash (key value data
+                          (cond
+                            ((string= key "sessionId") (push :session-id result) (push value result))
+                            ((string= key "userId") (push :user-id result) (push value result))
+                            ((string= key "username") (push :username result) (push value result))
+                            ((string= key "expiresAt") (push :expires-at result) (push value result))
+                            ((string= key "ipAddress") (push :ip-address result) (push value result))
+                            ((string= key "userAgent") (push :user-agent result) (push value result)))))
+             (return-from storage-get-session (nreverse result))))
           (otherwise
-           (log-error "Unknown data type from Redis: ~A" (type-of data)))))
+           (log-error "Unknown data type from Redis: ~A" (type-of data))))))
     ;; Fallback to PostgreSQL
     (ensure-pg-connected)
     (let ((pg-result (postmodern:query

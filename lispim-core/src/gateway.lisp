@@ -563,10 +563,9 @@
 (defun broadcast-to-all (message)
   "Broadcast message to all connections"
   (declare (type (or string vector) message))
-  (bordeaux-threads:with-lock-held (*connections-lock*)
-    (maphash (lambda (id conn)
-               (send-to-connection conn message))
-             *connections*)))
+  (with-lock-held (*connections-lock*)
+    (do-hash (id conn *connections*)
+      (send-to-connection conn message))))
 
 (defun broadcast-message-to-conversation (conversation-id message)
   "Broadcast message to all participants in a conversation (except sender)"
@@ -1031,13 +1030,12 @@
   "Check all connection heartbeats"
   (let ((now (get-universal-time))
         (timed-out-connections nil))
-    (bordeaux-threads:with-lock-held (*connections-lock*)
-      (maphash (lambda (id conn)
-                 (declare (ignore id))
-                 (when (> (- now (connection-last-heartbeat conn))
-                          *heartbeat-timeout*)
-                   (push conn timed-out-connections)))
-               *connections*))
+    (with-lock-held (*connections-lock*)
+      (do-hash (id conn *connections*)
+        (declare (ignore id))
+        (when (> (- now (connection-last-heartbeat conn))
+                 *heartbeat-timeout*)
+          (push conn timed-out-connections))))
     (dolist (conn timed-out-connections)
       (log-warn "Connection ~a heartbeat timeout" (connection-id conn))
       (unregister-connection (connection-id conn)))))
@@ -2708,11 +2706,10 @@
   (stop-heartbeat-monitor)
 
   ;; Close all connections
-  (bordeaux-threads:with-lock-held (*connections-lock*)
-    (maphash (lambda (id conn)
-               (declare (ignore id))
-               (setf (connection-state conn) :closed))
-             *connections*)
+  (with-lock-held (*connections-lock*)
+    (do-hash (id conn *connections*)
+      (declare (ignore id))
+      (setf (connection-state conn) :closed))
     (clrhash *connections*)
     (setf *connections-active-gauge* 0))
 
