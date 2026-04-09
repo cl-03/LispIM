@@ -49,6 +49,7 @@
                (:file "conditions" :depends-on ("package"))
                (:file "types" :depends-on ("package" "conditions"))
                (:file "utils" :depends-on ("package" "conditions" "types"))
+               (:file "macros" :depends-on ("package" "utils" "conditions" "types"))
                (:file "snowflake" :depends-on ("package" "utils" "conditions" "types"))
                (:file "db-migration" :depends-on ("package" "utils" "conditions" "types"))
                (:file "storage" :depends-on ("package" "utils" "db-migration" "conditions" "types"))

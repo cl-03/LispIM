@@ -1368,7 +1368,26 @@
    #:log-debug
    #:log-info
    #:log-warn
-   #:log-error))
+   #:log-error
+   ;; On Lisp Macros
+   #:awhen
+   #:acase
+   #:acond
+   #:aand
+   #:aor
+   #:define-getf*
+   #:with-plist-bindings
+   #:with-redis-connection
+   #:with-lock-held
+   #:do-hash
+   #:do-plist
+   #:accumulating
+   #:aif
+   #:aif*
+   #:awhen*
+   #:repeat
+   #:building
+   #:choosing))
 
 (in-package :lispim-core)
 

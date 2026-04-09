@@ -647,3 +647,28 @@
     (error (c)
       (log-error "JSON decode failed: ~a" c)
       nil)))
+
+;;;; =====================================================================
+;;;; Resource Management Macros (On Lisp Chapter 10)
+;;;; =====================================================================
+
+;; Note: These macros use INTERN to avoid package dependency issues at compile time.
+;; The packages (cl-redis, bordeaux-threads) are loaded by ASDF before these files compile.
+
+(defmacro with-redis-connection ((var pool) &body body)
+  "Redis 连接宏 - 自动清理
+   Example: (with-redis-connection (conn *redis-pool*) (cl-redis:redis-get conn \"key\"))"
+  (let ((redis-pop-sym (intern "REDIS-POP" "CL-REDIS"))
+        (redis-push-sym (intern "REDIS-PUSH" "CL-REDIS")))
+    `(let ((,var (funcall #',redis-pop-sym ,pool)))
+       (unwind-protect
+            (progn ,@body)
+         (when ,var
+           (funcall #',redis-push-sym ,var ,pool))))))
+
+(defmacro with-lock-held ((lock) &body body)
+  "线程锁宏 - 使用 bordeaux-threads
+   Example: (with-lock-held (*data-lock*) (update-data))"
+  (let ((with-lock-sym (intern "WITH-LOCK-HELD" "BORDEAUX-THREADS")))
+    `(,with-lock-sym (,lock)
+       ,@body)))
