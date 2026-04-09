@@ -86,7 +86,9 @@
 
 (defmacro do-hash ((key-var val-var hash &optional result) &body body)
   "Iterate over hash-table entries
-   Example: (do-hash (k v ht) (print (cons k v)))"
+   Example: (do-hash (k v ht) (print (cons k v)))
+
+   Note: key-var and val-var should be simple symbols, not expressions."
   (let ((hash-sym (gensym "HASH")))
     `(let ((,hash-sym ,hash))
        (maphash (lambda (,key-var ,val-var) ,@body) ,hash-sym)
@@ -94,24 +96,19 @@
 
 (defmacro accumulating ((collector init &key test) &body body)
   "Accumulate results with optional uniqueness test
-   Example: (accumulating (result nil :test #'equal) (dolist (x items) (result x)))"
-  (let ((result-sym (gensym "RESULT")))
-    `(let ((,result-sym ,init))
-       (macrolet ((,collector (item)
+   Example: (accumulating (result nil :test #'equal) (dolist (x items) (result x)))
+
+   Note: The item argument to collector is evaluated exactly once."
+  (let ((result-sym (gensym "RESULT"))
+        (item-var (gensym "ITEM"))
+        (test-var (gensym "TEST")))
+    `(let ((,result-sym ,init)
+           (,test-var ,test))
+       (macrolet ((,collector (,item-var)
                     `(progn
-                       ,@(when test `((unless (find ,item ,',result-sym :test ,',test))))
-                       (push ,item ,',result-sym))))
+                       ,@(if test-var
+                             `((unless (find ,item-var ,,result-sym :test ,,test-var)
+                                 (push ,item-var ,,result-sym)))
+                             `((push ,item-var ,,result-sym))))))
          ,@body
          (nreverse ,result-sym)))))
-
-;;;; =====================================================================
-;;;; SECTION 4: Utility Macros
-;;;; =====================================================================
-
-;; Note: with-gensyms is available from ALEXANDRIA package.
-
-(defmacro repeat (n &body body)
-  "Repeat body n times"
-  `(dotimes (i ,n)
-     (declare (ignore i))
-     ,@body))
